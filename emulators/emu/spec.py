@@ -1,0 +1,525 @@
+"""Reference network specification for the multi-layer telecom digital twin.
+
+This is the ground truth the emulators expose through authentic vendor-format
+interfaces (Ciena MCP, Nokia NSP, NMSWorks CygNet, Lepton GIS, VIAVI ONMSi,
+EXFO Nova, Comviva BSS, Ericsson ENM, Cisco/Juniper Syslog & SNMP, Jira SM,
+ServiceNow).
+
+The NOC Copilot backend NEVER imports this module: it discovers topology,
+cables, ducts, manholes, alarms, OTDR traces, and customer SLAs strictly
+through its connectors.
+"""
+from __future__ import annotations
+
+# ---------------------------------------------------------------- operator profiles
+OPERATOR_PROFILES: dict[str, dict] = {
+    "du_converged": {
+        "id": "du_converged",
+        "name": "Converged Mobile, 5G & Enterprise Operator (UAE — du / e& archetype)",
+        "short_name": "Converged 4G/5G + Fibre + Enterprise",
+        "region": "Dubai / UAE Metro",
+        "currency": "AED",
+        "active_packs": ["fibre_osp", "dwdm_optical", "ip_mpls", "mobile_ran", "gpon_access", "enterprise_sla"],
+        "active_oems": [
+            "ciena_mcp", "nokia_nsp", "nmsworks_cygnet", "lepton_gis",
+            "viavi_onmsi", "ericsson_enm", "comviva_bss", "jira_sm", "servicenow_itsm",
+        ],
+        "description": (
+            "Full converged network: Ciena 6500 & Nokia 1830 DWDM rings, Cisco/Juniper/Nokia/Huawei IP/MPLS core, "
+            "Ericsson/Nokia 4G/5G hub-and-tail cell sites with microwave & fibre backhaul, GPON FTTH/enterprise "
+            "access, Lepton OSP GIS, VIAVI ONMSi OTDR, NMSWorks OSS, and Comviva BSS."
+        ),
+    },
+    "constl_fiber": {
+        "id": "constl_fiber",
+        "name": "Pure-Play Metro Fibre, Wavelength & DCI Operator (Constl archetype)",
+        "short_name": "Metro Fibre / DWDM / DCI (Constl)",
+        "region": "Metro & Data-Centre Corridor",
+        "currency": "AED",
+        "active_packs": ["fibre_osp", "dwdm_optical", "ip_mpls", "enterprise_sla"],
+        "active_oems": [
+            "ciena_mcp", "nokia_nsp", "nmsworks_cygnet", "lepton_gis",
+            "viavi_onmsi", "exfo_nova", "comviva_bss", "jira_sm", "servicenow_itsm",
+        ],
+        "description": (
+            "Neutral dense-fibre and data-centre interconnect operator: 100G/400G Ciena DWDM wavelengths, "
+            "MEF Ethernet & L3VPN enterprise circuits, SRLG route-diversity SLA enforcement, Lepton GIS duct/slack "
+            "inventory, VIAVI ONMSi live 1625nm OTDR monitoring, and NMSWorks CygNet OSS."
+        ),
+    },
+    "vi_india": {
+        "id": "vi_india",
+        "name": "High-Scale Mobile, Metro Fibre & Microwave Operator (Vodafone Idea archetype)",
+        "short_name": "4G/5G RAN + Metro Fibre + Microwave (Vi)",
+        "region": "High-Density Metro",
+        "currency": "AED",
+        "active_packs": ["fibre_osp", "dwdm_optical", "ip_mpls", "mobile_ran", "enterprise_sla"],
+        "active_oems": [
+            "ciena_mcp", "nokia_nsp", "nmsworks_cygnet", "lepton_gis",
+            "viavi_onmsi", "ericsson_enm", "comviva_bss", "jira_sm", "servicenow_itsm",
+        ],
+        "description": (
+            "Multi-vendor 4G/5G RAN (Ericsson/Nokia) with dense metro fibre rings, E-band/18GHz microwave tail "
+            "backhaul, frequent municipal roadwork fibre cuts, site AC-mains/battery telemetry, and enterprise MPLS/IoT."
+        ),
+    },
+    "pccw_subsea": {
+        "id": "pccw_subsea",
+        "name": "Global Subsea, Optical DCI & Wholesale Carrier (PCCW Global / HKT archetype)",
+        "short_name": "Subsea + 400G DCI + Wholesale (PCCW)",
+        "region": "Cable Landing & DCI Corridor",
+        "currency": "AED",
+        "active_packs": ["fibre_osp", "dwdm_optical", "ip_mpls", "enterprise_sla"],
+        "active_oems": [
+            "ciena_mcp", "nokia_nsp", "netbox_dcim", "lepton_gis",
+            "viavi_onmsi", "exfo_nova", "comviva_bss", "jira_sm", "servicenow_itsm",
+        ],
+        "description": (
+            "Subsea cable landing station (Jebel Ali CLS) connected to hyperscale colocation data centres via "
+            "protected 100G/400G DWDM wavelengths, pre-FEC BER / OSNR optical degradation tracking, and SRLG audits."
+        ),
+    },
+}
+
+# ---------------------------------------------------------------- nodes
+# kind: pop | junction | customer | cellsite | olt_cabinet
+NODES: dict[str, dict] = {
+    # Points of presence (exchange / core buildings / cable landing station)
+    "JBL": {"kind": "pop", "name": "Jebel Ali CLS & POP", "lat": 25.0110, "lon": 55.1150},
+    "MRN": {"kind": "pop", "name": "Media City POP", "lat": 25.0905, "lon": 55.1555},
+    "BRS": {"kind": "pop", "name": "Al Barsha POP", "lat": 25.1135, "lon": 55.1960},
+    "QZ": {"kind": "pop", "name": "Al Quoz POP", "lat": 25.1405, "lon": 55.2315},
+    "BB": {"kind": "pop", "name": "Business Bay POP", "lat": 25.1855, "lon": 55.2655},
+    "DIFC": {"kind": "pop", "name": "DIFC POP", "lat": 25.2105, "lon": 55.2795},
+    "KRM": {"kind": "pop", "name": "Karama POP", "lat": 25.2425, "lon": 55.3035},
+    "DRA": {"kind": "pop", "name": "Deira POP", "lat": 25.2690, "lon": 55.3205},
+    "AIR": {"kind": "pop", "name": "Garhoud Airport POP", "lat": 25.2470, "lon": 55.3510},
+    "DSO": {"kind": "pop", "name": "Silicon Oasis DC POP", "lat": 25.1205, "lon": 55.3805},
+    # Duct junctions (road interchanges where trenches & manholes meet)
+    "J_JA": {"kind": "junction", "name": "SZR Jebel Ali Junction", "lat": 25.0215, "lon": 55.1265},
+    "J_I5": {"kind": "junction", "name": "SZR Interchange 5", "lat": 25.0835, "lon": 55.1520},
+    "J_I4": {"kind": "junction", "name": "SZR Interchange 4", "lat": 25.1075, "lon": 55.1835},
+    "J_I3": {"kind": "junction", "name": "SZR Interchange 3", "lat": 25.1370, "lon": 55.2155},
+    "J_I2": {"kind": "junction", "name": "SZR Interchange 2", "lat": 25.1640, "lon": 55.2395},
+    "J_I1": {"kind": "junction", "name": "SZR Interchange 1", "lat": 25.1925, "lon": 55.2620},
+    "J_DG": {"kind": "junction", "name": "DIFC Gate Manhole Chamber", "lat": 25.2125, "lon": 55.2765},
+    "J_TC": {"kind": "junction", "name": "Trade Centre Junction", "lat": 25.2265, "lon": 55.2870},
+    "J_AK": {"kind": "junction", "name": "Al Khail / Hessa Junction", "lat": 25.0830, "lon": 55.2005},
+    "J_RAK": {"kind": "junction", "name": "Ras Al Khor Junction", "lat": 25.1955, "lon": 55.3445},
+    "J_GB": {"kind": "junction", "name": "Garhoud Bridge East Chamber", "lat": 25.2290, "lon": 55.3370},
+    "J_MB": {"kind": "junction", "name": "Maktoum Bridge North Chamber", "lat": 25.2560, "lon": 55.3190},
+    # Enterprise customer buildings
+    "C_EGB": {"kind": "customer", "name": "Emirates Gulf Bank HQ", "lat": 25.2140, "lon": 55.2810},
+    "C_MHH": {"kind": "customer", "name": "Marina Health Hospital", "lat": 25.0785, "lon": 55.1395},
+    "C_BRG": {"kind": "customer", "name": "Barsha Retail Group HQ", "lat": 25.1185, "lon": 55.2005},
+    "C_JLC": {"kind": "customer", "name": "Jebel Ali Logistics Cloud DC", "lat": 25.0050, "lon": 55.0950},
+    "C_DMB": {"kind": "customer", "name": "Dubai Media Broadcast Centre", "lat": 25.0955, "lon": 55.1550},
+    "C_SODC": {"kind": "customer", "name": "Oasis Sovereign AI DC", "lat": 25.1180, "lon": 55.3880},
+    "C_GAC": {"kind": "customer", "name": "Gulf Air Cargo Hub", "lat": 25.2555, "lon": 55.3640},
+    "C_AQI": {"kind": "customer", "name": "Al Quoz Industrial Smart-Grid Hub", "lat": 25.1355, "lon": 55.2390},
+    # 4G/5G Mobile RAN Hub & Tail Cell Sites (for Converged / Mobile operators)
+    "RAN_BB_HUB": {"kind": "cellsite", "name": "gNB-BB-01 Business Bay Hub Site", "lat": 25.1810, "lon": 55.2580},
+    "RAN_BB_T1": {"kind": "cellsite", "name": "gNB-BB-02 Canal Promenade Tail", "lat": 25.1745, "lon": 55.2490},
+    "RAN_BB_T2": {"kind": "cellsite", "name": "gNB-BB-03 Marasi Drive Tail", "lat": 25.1885, "lon": 55.2725},
+    "RAN_MRN_HUB": {"kind": "cellsite", "name": "gNB-MRN-01 Marina Walk Hub Site", "lat": 25.0850, "lon": 55.1465},
+    "RAN_DSO_MW1": {"kind": "cellsite", "name": "gNB-DSO-04 Academic City Microwave Tail", "lat": 25.1310, "lon": 55.3980},
+}
+
+# ---------------------------------------------------------------- duct network
+DUCTS: list[dict] = [
+    {"id": "D-JBL-JJA", "a": "JBL", "b": "J_JA"},
+    {"id": "D-JJA-I5", "a": "J_JA", "b": "J_I5"},
+    {"id": "D-I5-MRN", "a": "J_I5", "b": "MRN"},
+    {"id": "D-I5-I4", "a": "J_I5", "b": "J_I4"},
+    {"id": "D-I4-BRS", "a": "J_I4", "b": "BRS"},
+    {"id": "D-I4-I3", "a": "J_I4", "b": "J_I3"},
+    {"id": "D-I3-QZ", "a": "J_I3", "b": "QZ"},
+    {"id": "D-I3-I2", "a": "J_I3", "b": "J_I2"},
+    {"id": "D-I2-I1", "a": "J_I2", "b": "J_I1", "bridge": "Dubai Water Canal Bridge (SZR)"},
+    {"id": "D-I1-BB", "a": "J_I1", "b": "BB"},
+    {"id": "D-I1-DG", "a": "J_I1", "b": "J_DG"},
+    {"id": "D-DG-DIFC", "a": "J_DG", "b": "DIFC"},
+    {"id": "D-DG-TC", "a": "J_DG", "b": "J_TC"},
+    {"id": "D-TC-KRM", "a": "J_TC", "b": "KRM"},
+    # Inland return (Al Khail / Hessa)
+    {"id": "D-JBL-AK", "a": "JBL", "b": "J_AK"},
+    {"id": "D-AK-QZ", "a": "J_AK", "b": "QZ"},
+    # East side
+    {"id": "D-KRM-MB", "a": "KRM", "b": "J_MB", "bridge": "Al Maktoum Bridge"},
+    {"id": "D-MB-DRA", "a": "J_MB", "b": "DRA"},
+    {"id": "D-DRA-AIR", "a": "DRA", "b": "AIR"},
+    {"id": "D-AIR-GB", "a": "AIR", "b": "J_GB"},
+    {"id": "D-GB-KRM", "a": "J_GB", "b": "KRM", "bridge": "Al Garhoud Bridge"},
+    {"id": "D-AIR-DSO", "a": "AIR", "b": "DSO"},
+    {"id": "D-DSO-RAK", "a": "DSO", "b": "J_RAK"},
+    {"id": "D-RAK-BB", "a": "J_RAK", "b": "BB"},
+    {"id": "D-RAK-GB", "a": "J_RAK", "b": "J_GB"},
+    # Customer building entries / lead-ins
+    {"id": "D-DG-EGB", "a": "J_DG", "b": "C_EGB"},
+    {"id": "D-I5-MHH", "a": "J_I5", "b": "C_MHH"},
+    {"id": "D-BRS-BRG", "a": "BRS", "b": "C_BRG"},
+    {"id": "D-JBL-JLC", "a": "JBL", "b": "C_JLC"},
+    {"id": "D-MRN-DMB", "a": "MRN", "b": "C_DMB"},
+    {"id": "D-DSO-SODC", "a": "DSO", "b": "C_SODC"},
+    {"id": "D-AIR-GAC", "a": "AIR", "b": "C_GAC"},
+    {"id": "D-QZ-AQI", "a": "QZ", "b": "C_AQI"},
+    # Mobile RAN hub & tail fibre ducts
+    {"id": "D-I1-BBHUB", "a": "J_I1", "b": "RAN_BB_HUB"},
+    {"id": "D-BBHUB-BBT1", "a": "RAN_BB_HUB", "b": "RAN_BB_T1"},
+    {"id": "D-BBHUB-BBT2", "a": "RAN_BB_HUB", "b": "RAN_BB_T2"},
+    {"id": "D-I5-MRNHUB", "a": "J_I5", "b": "RAN_MRN_HUB"},
+]
+
+# ---------------------------------------------------------------- cables
+CABLES: list[dict] = [
+    # Ciena 6500 west ring  JBL-MRN-BRS-QZ-(inland)-JBL
+    {"id": "CBL-JBL-MRN-01", "path": ["JBL", "J_JA", "J_I5", "MRN"], "fibres": 144, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-MRN-BRS-01", "path": ["MRN", "J_I5", "J_I4", "BRS"], "fibres": 144, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-BRS-QZ-01", "path": ["BRS", "J_I4", "J_I3", "QZ"], "fibres": 144, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-QZ-JBL-01", "path": ["QZ", "J_AK", "JBL"], "fibres": 96, "role": "trunk", "helix_factor": 1.015},
+    # Ciena chain  QZ-BB-DIFC (along SZR)
+    {"id": "CBL-QZ-BB-01", "path": ["QZ", "J_I3", "J_I2", "J_I1", "BB"], "fibres": 144, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-BB-DIFC-01", "path": ["BB", "J_I1", "J_DG", "DIFC"], "fibres": 144, "role": "trunk", "helix_factor": 1.015},
+    # Nokia 1830 east ring  KRM-DRA-AIR-DSO-(RAK)-KRM
+    {"id": "CBL-KRM-DRA-01", "path": ["KRM", "J_MB", "DRA"], "fibres": 96, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-DRA-AIR-01", "path": ["DRA", "AIR"], "fibres": 96, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-AIR-DSO-01", "path": ["AIR", "DSO"], "fibres": 96, "role": "trunk", "helix_factor": 1.015},
+    {"id": "CBL-DSO-KRM-01", "path": ["DSO", "J_RAK", "J_GB", "KRM"], "fibres": 96, "role": "trunk", "helix_factor": 1.015},
+    # Dark fibre IP interconnects between optical domains
+    {"id": "CBL-DIFC-KRM-01", "path": ["DIFC", "J_DG", "J_TC", "KRM"], "fibres": 48, "role": "dark", "helix_factor": 1.015},
+    {"id": "CBL-BB-DSO-01", "path": ["BB", "J_RAK", "DSO"], "fibres": 48, "role": "dark", "helix_factor": 1.015},
+    # Enterprise access cables
+    {"id": "CBL-DIFC-EGB-01", "path": ["DIFC", "J_DG", "C_EGB"], "fibres": 24, "role": "access", "helix_factor": 1.012},
+    # NOTE: CBL-BB-EGB-01 is sold as "diverse secondary" from Business Bay POP,
+    # but physically enters J_DG and shares duct D-DG-EGB with CBL-DIFC-EGB-01!
+    {"id": "CBL-BB-EGB-01", "path": ["BB", "J_I1", "J_DG", "C_EGB"], "fibres": 24, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-MRN-MHH-01", "path": ["MRN", "J_I5", "C_MHH"], "fibres": 24, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-BRS-BRG-01", "path": ["BRS", "C_BRG"], "fibres": 12, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-JBL-JLC-01", "path": ["JBL", "C_JLC"], "fibres": 24, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-MRN-DMB-01", "path": ["MRN", "C_DMB"], "fibres": 24, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-DSO-SODC-01", "path": ["DSO", "C_SODC"], "fibres": 48, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-AIR-GAC-01", "path": ["AIR", "C_GAC"], "fibres": 12, "role": "access", "helix_factor": 1.012},
+    {"id": "CBL-QZ-AQI-01", "path": ["QZ", "C_AQI"], "fibres": 12, "role": "access", "helix_factor": 1.012},
+    # Mobile RAN backhaul fibre cables
+    {"id": "CBL-BB-RANHUB-01", "path": ["QZ", "J_I3", "J_I2", "J_I1", "RAN_BB_HUB"], "fibres": 48, "role": "ran_backhaul", "helix_factor": 1.015},
+    {"id": "CBL-RAN-BBT1-01", "path": ["RAN_BB_HUB", "RAN_BB_T1"], "fibres": 24, "role": "ran_backhaul", "helix_factor": 1.012},
+    {"id": "CBL-RAN-BBT2-01", "path": ["RAN_BB_HUB", "RAN_BB_T2"], "fibres": 24, "role": "ran_backhaul", "helix_factor": 1.012},
+]
+
+# ---------------------------------------------------------------- equipment
+OPTICAL = {
+    "JBL": "ciena", "MRN": "ciena", "BRS": "ciena", "QZ": "ciena", "BB": "ciena", "DIFC": "ciena",
+    "KRM": "nokia", "DRA": "nokia", "AIR": "nokia", "DSO": "nokia",
+}
+ROUTERS = {
+    "JBL": ("cisco", "ASR 9906"), "MRN": ("cisco", "ASR 9910"), "BRS": ("cisco", "ASR 9906"),
+    "QZ": ("juniper", "MX10008"), "BB": ("cisco", "ASR 9910"), "DIFC": ("juniper", "MX10008"),
+    "KRM": ("nokia", "7750 SR-7s"), "DRA": ("nokia", "7750 SR-7s"),
+    "AIR": ("huawei", "NE40E-X16A"), "DSO": ("huawei", "NE40E-X16A"),
+}
+
+# Mobile RAN Sites & Cells (3GPP gNodeB / eNodeB + Microwave + Site Power)
+RAN_SITES = [
+    {
+        "id": "RAN_BB_HUB",
+        "name": "gNB-BB-01 Business Bay Hub Site",
+        "vendor": "ericsson",
+        "controller": "ericsson_enm",
+        "pop_anchor": "BB",
+        "backhaul_type": "fibre",
+        "backhaul_cable": "CBL-QZ-BB-01",  # shares SZR trunk duct D-I2-I1!
+        "cells": ["CELL-BB01-N78-S1", "CELL-BB01-N78-S2", "CELL-BB01-N78-S3", "CELL-BB01-B3-S1"],
+        "downstream_tails": ["RAN_BB_T1", "RAN_BB_T2"],
+        "battery_backup_hours": 4.0,
+    },
+    {
+        "id": "RAN_BB_T1",
+        "name": "gNB-BB-02 Canal Promenade Tail",
+        "vendor": "ericsson",
+        "controller": "ericsson_enm",
+        "pop_anchor": "BB",
+        "hub_site": "RAN_BB_HUB",
+        "backhaul_type": "fibre_daisy",
+        "backhaul_cable": "CBL-RAN-BBT1-01",
+        "cells": ["CELL-BB02-N78-S1", "CELL-BB02-N78-S2", "CELL-BB02-B20-S1"],
+        "downstream_tails": [],
+        "battery_backup_hours": 2.5,
+    },
+    {
+        "id": "RAN_BB_T2",
+        "name": "gNB-BB-03 Marasi Drive Tail",
+        "vendor": "ericsson",
+        "controller": "ericsson_enm",
+        "pop_anchor": "BB",
+        "hub_site": "RAN_BB_HUB",
+        "backhaul_type": "fibre_daisy",
+        "backhaul_cable": "CBL-RAN-BBT2-01",
+        "cells": ["CELL-BB03-N78-S1", "CELL-BB03-N78-S2"],
+        "downstream_tails": [],
+        "battery_backup_hours": 2.5,
+    },
+    {
+        "id": "RAN_MRN_HUB",
+        "name": "gNB-MRN-01 Marina Walk Hub Site",
+        "vendor": "nokia",
+        "controller": "nokia_nsp",
+        "pop_anchor": "MRN",
+        "backhaul_type": "fibre",
+        "backhaul_cable": "CBL-JBL-MRN-01",
+        "cells": ["CELL-MRN01-N78-S1", "CELL-MRN01-N78-S2", "CELL-MRN01-B3-S1"],
+        "downstream_tails": [],
+        "battery_backup_hours": 4.0,
+    },
+    {
+        "id": "RAN_DSO_MW1",
+        "name": "gNB-DSO-04 Academic City Microwave Tail",
+        "vendor": "nokia",
+        "controller": "nokia_nsp",
+        "pop_anchor": "DSO",
+        "backhaul_type": "microwave_eband",
+        "mw_link_id": "MW-DSO-ACAD-80G",
+        "cells": ["CELL-DSO04-N78-S1", "CELL-DSO04-B3-S1"],
+        "downstream_tails": [],
+        "battery_backup_hours": 3.0,
+    },
+]
+
+# GPON OLT & ONT Splitter Clusters (for FTTH / Enterprise GPON access)
+GPON_SPLITTER_CLUSTERS = [
+    {
+        "id": "SPL-MRN-SZR-04",
+        "olt_id": "OLT-MRN-HW-01",
+        "pop": "MRN",
+        "feeder_cable": "CBL-MRN-MHH-01",
+        "ont_count": 32,
+        "district": "Dubai Marina South",
+    },
+    {
+        "id": "SPL-QZ-IND-02",
+        "olt_id": "OLT-QZ-NK-01",
+        "pop": "QZ",
+        "feeder_cable": "CBL-QZ-AQI-01",
+        "ont_count": 24,
+        "district": "Al Quoz Industrial Area 3",
+    },
+]
+
+# Optical multiplex sections (ROADM degree to degree) = one trunk cable each.
+OMS = [
+    ("JBL", "MRN", "CBL-JBL-MRN-01"), ("MRN", "BRS", "CBL-MRN-BRS-01"),
+    ("BRS", "QZ", "CBL-BRS-QZ-01"), ("QZ", "JBL", "CBL-QZ-JBL-01"),
+    ("QZ", "BB", "CBL-QZ-BB-01"), ("BB", "DIFC", "CBL-BB-DIFC-01"),
+    ("KRM", "DRA", "CBL-KRM-DRA-01"), ("DRA", "AIR", "CBL-DRA-AIR-01"),
+    ("AIR", "DSO", "CBL-AIR-DSO-01"), ("DSO", "KRM", "CBL-DSO-KRM-01"),
+]
+
+# Wavelengths (OCh). path = ROADM sequence.
+# Note: OCH-JLC-W and OCH-JLC-P BOTH traverse QZ->BB->DIFC on CBL-QZ-BB-01 and CBL-BB-DIFC-01!
+# So a cut on CBL-QZ-BB-01 breaks BOTH working and protect wavelengths if not rerouted via KRM/DSO,
+# AND both legs share access cable CBL-JBL-JLC-01 at the Jebel Ali end (a classic SRLG trap).
+WAVELENGTHS = [
+    {"id": "OCH-JBL-MRN-1", "path": ["JBL", "MRN"], "rate": "100G", "freq": 193.10},
+    {"id": "OCH-MRN-BRS-1", "path": ["MRN", "BRS"], "rate": "100G", "freq": 193.15},
+    {"id": "OCH-BRS-QZ-1", "path": ["BRS", "QZ"], "rate": "100G", "freq": 193.20},
+    {"id": "OCH-QZ-JBL-1", "path": ["QZ", "JBL"], "rate": "100G", "freq": 193.25},
+    {"id": "OCH-JBL-QZ-X1", "path": ["JBL", "MRN", "BRS", "QZ"], "rate": "400G", "freq": 193.40},
+    {"id": "OCH-QZ-BB-1", "path": ["QZ", "BB"], "rate": "100G", "freq": 193.10},
+    {"id": "OCH-BB-DIFC-1", "path": ["BB", "DIFC"], "rate": "100G", "freq": 193.15},
+    {"id": "OCH-KRM-DRA-1", "path": ["KRM", "DRA"], "rate": "100G", "freq": 193.10},
+    {"id": "OCH-DRA-AIR-1", "path": ["DRA", "AIR"], "rate": "100G", "freq": 193.15},
+    {"id": "OCH-AIR-DSO-1", "path": ["AIR", "DSO"], "rate": "100G", "freq": 193.20},
+    {"id": "OCH-DSO-KRM-1", "path": ["DSO", "KRM"], "rate": "100G", "freq": 193.25},
+    {"id": "OCH-JLC-W", "path": ["JBL", "MRN", "BRS", "QZ", "BB", "DIFC"], "rate": "100G", "freq": 193.60,
+     "service": "SVC-JLC-WAVE-100G", "leg": "working"},
+    {"id": "OCH-JLC-P", "path": ["JBL", "QZ", "BB", "DIFC"], "rate": "100G", "freq": 193.65,
+     "service": "SVC-JLC-WAVE-100G", "leg": "protect"},
+    {"id": "OCH-SODC-AIR", "path": ["DSO", "AIR"], "rate": "100G", "freq": 193.70,
+     "service": "SVC-SODC-DCI-100G", "leg": "working"},
+]
+
+IP_LINKS = [
+    ("JBL", "MRN", "OCH-JBL-MRN-1"), ("MRN", "BRS", "OCH-MRN-BRS-1"),
+    ("BRS", "QZ", "OCH-BRS-QZ-1"), ("QZ", "JBL", "OCH-QZ-JBL-1"),
+    ("JBL", "QZ", "OCH-JBL-QZ-X1"),
+    ("QZ", "BB", "OCH-QZ-BB-1"), ("BB", "DIFC", "OCH-BB-DIFC-1"),
+    ("KRM", "DRA", "OCH-KRM-DRA-1"), ("DRA", "AIR", "OCH-DRA-AIR-1"),
+    ("AIR", "DSO", "OCH-AIR-DSO-1"), ("DSO", "KRM", "OCH-DSO-KRM-1"),
+    ("DIFC", "KRM", "CBL-DIFC-KRM-01"), ("BB", "DSO", "CBL-BB-DSO-01"),
+]
+
+CUSTOMERS = [
+    {"id": "CUST-1001", "node": "C_EGB", "name": "Emirates Gulf Bank", "segment": "BFSI", "tier": "Platinum", "contact": "noc-escalation@egbank.ae"},
+    {"id": "CUST-1002", "node": "C_MHH", "name": "Marina Health Hospital", "segment": "Healthcare", "tier": "Gold", "contact": "it-ops@marinahealth.ae"},
+    {"id": "CUST-1003", "node": "C_BRG", "name": "Barsha Retail Group", "segment": "Retail", "tier": "Gold", "contact": "netops@barsharetail.ae"},
+    {"id": "CUST-1004", "node": "C_JLC", "name": "Jebel Ali Logistics Cloud", "segment": "Logistics & Subsea DCI", "tier": "Platinum", "contact": "infra@jafzacloud.ae"},
+    {"id": "CUST-1005", "node": "C_DMB", "name": "Dubai Media Broadcast Centre", "segment": "Media Broadcast", "tier": "Platinum", "contact": "tx-control@dmbc.ae"},
+    {"id": "CUST-1006", "node": "C_SODC", "name": "Oasis Sovereign AI DC", "segment": "Hyperscale / AI DC", "tier": "Platinum", "contact": "dc-noc@oasis-ai.ae"},
+    {"id": "CUST-1007", "node": "C_GAC", "name": "Gulf Air Cargo Hub", "segment": "Aviation", "tier": "Gold", "contact": "ops@gulfaircargo.ae"},
+    {"id": "CUST-1008", "node": "C_AQI", "name": "Al Quoz Smart-Grid Utility", "segment": "Energy & Smart Metering", "tier": "Silver", "contact": "scada@alquozgrid.ae"},
+]
+
+SLA_TIERS = {
+    "Platinum": {"availability": 99.99, "mttr_hours": 4.0, "penalty_per_hour_aed": 25000},
+    "Gold": {"availability": 99.95, "mttr_hours": 8.0, "penalty_per_hour_aed": 8000},
+    "Silver": {"availability": 99.90, "mttr_hours": 24.0, "penalty_per_hour_aed": 1500},
+}
+
+SERVICES = [
+    {"id": "SVC-EGB-L3VPN-01", "customer": "CUST-1001", "type": "L3VPN", "bw": "10G",
+     "legs": [{"name": "primary", "pop": "DIFC", "cable": "CBL-DIFC-EGB-01"},
+              {"name": "secondary", "pop": "BB", "cable": "CBL-BB-EGB-01"}],
+     "ordered_diverse": True},
+    {"id": "SVC-MHH-DIA-01", "customer": "CUST-1002", "type": "DIA", "bw": "1G",
+     "legs": [{"name": "primary", "pop": "MRN", "cable": "CBL-MRN-MHH-01"}]},
+    {"id": "SVC-BRG-L3VPN-01", "customer": "CUST-1003", "type": "L3VPN", "bw": "1G",
+     "legs": [{"name": "primary", "pop": "BRS", "cable": "CBL-BRS-BRG-01"}]},
+    {"id": "SVC-JLC-WAVE-100G", "customer": "CUST-1004", "type": "Wavelength", "bw": "100G",
+     "legs": [{"name": "working", "och": "OCH-JLC-W", "cable": "CBL-JBL-JLC-01"},
+              {"name": "protect", "och": "OCH-JLC-P", "cable": "CBL-JBL-JLC-01"}],
+     "ordered_diverse": True},
+    {"id": "SVC-DMB-DIA-01", "customer": "CUST-1005", "type": "DIA", "bw": "10G",
+     "legs": [{"name": "primary", "pop": "MRN", "cable": "CBL-MRN-DMB-01"}]},
+    {"id": "SVC-SODC-DCI-100G", "customer": "CUST-1006", "type": "Wavelength", "bw": "100G",
+     "legs": [{"name": "working", "och": "OCH-SODC-AIR", "cable": "CBL-DSO-SODC-01"}]},
+    {"id": "SVC-GAC-L3VPN-01", "customer": "CUST-1007", "type": "L3VPN", "bw": "1G",
+     "legs": [{"name": "primary", "pop": "AIR", "cable": "CBL-AIR-GAC-01"}]},
+    {"id": "SVC-AQI-DIA-01", "customer": "CUST-1008", "type": "DIA", "bw": "500M",
+     "legs": [{"name": "primary", "pop": "QZ", "cable": "CBL-QZ-AQI-01"}]},
+]
+
+RFTS = [
+    {"id": "ONMSI-RTU-MRN", "vendor": "viavi", "pop": "MRN",
+     "monitors": ["CBL-JBL-MRN-01", "CBL-MRN-BRS-01", "CBL-MRN-MHH-01", "CBL-MRN-DMB-01"]},
+    {"id": "ONMSI-RTU-QZ", "vendor": "viavi", "pop": "QZ",
+     "monitors": ["CBL-BRS-QZ-01", "CBL-QZ-JBL-01", "CBL-QZ-BB-01", "CBL-QZ-AQI-01"]},
+    {"id": "ONMSI-RTU-DIFC", "vendor": "viavi", "pop": "DIFC",
+     "monitors": ["CBL-BB-DIFC-01", "CBL-DIFC-EGB-01", "CBL-DIFC-KRM-01", "CBL-BB-EGB-01"]},
+    {"id": "NOVA-RTU-KRM", "vendor": "exfo", "pop": "KRM",
+     "monitors": ["CBL-KRM-DRA-01", "CBL-DSO-KRM-01"]},
+    {"id": "NOVA-RTU-AIR", "vendor": "exfo", "pop": "AIR",
+     "monitors": ["CBL-DRA-AIR-01", "CBL-AIR-DSO-01", "CBL-AIR-GAC-01"]},
+]
+
+# ---------------------------------------------------------------- Pre-built fault scenarios
+# Engineers can inject any of these (or click any duct/cable/site on the map to cut/fault it!)
+FAULT_SCENARIOS: list[dict] = [
+    {
+        "id": "szr_canal_fibre_cut",
+        "title": "Metro Trunk Fibre Cut + Hidden SRLG Backup Failure (Sheikh Zayed Rd Canal)",
+        "category": "Fibre Cut / Multi-Vendor Storm",
+        "operators": ["du_converged", "constl_fiber", "vi_india", "pccw_subsea"],
+        "summary": (
+            "Civil excavation near Dubai Water Canal severs trunk cable CBL-QZ-BB-01 at 62% along QZ->BB. "
+            "Triggers a 28-alarm storm across Ciena MCP (OMS/OCh LOS), Cisco ASR & Juniper MX (BFD/BGP/ISIS down), "
+            "VIAVI ONMSi (1625nm OTDR reflective break), NMSWorks CygNet, and Ericsson ENM (hub site gNB-BB-01 "
+            "+ 2 downstream 5G tail sites cascading dark). Exposes a critical SRLG failure: Jebel Ali Logistics "
+            "Cloud's '1+1 protected' 100G wavelength had BOTH working and protect legs routed through the QZ-BB span."
+        ),
+        "fault_type": "fibre_cut",
+        "target_cable": "CBL-QZ-BB-01",
+        "cut_ratio": 0.62,
+    },
+    {
+        "id": "difc_gate_srlg_cut",
+        "title": "Dual-Homed Bank HQ Outage via Shared Manhole Chamber (DIFC Gate SRLG Violation)",
+        "category": "Enterprise SLA / False Diversity",
+        "operators": ["constl_fiber", "du_converged"],
+        "summary": (
+            "Third-party contractor damages duct D-DG-EGB outside DIFC Gate Chamber (J_DG). Emirates Gulf Bank HQ "
+            "purchased a Platinum 'Dual-POP Diverse 10G L3VPN' (primary to DIFC POP, secondary to Business Bay POP), "
+            "but Lepton GIS geometry reveals both cables CBL-DIFC-EGB-01 and CBL-BB-EGB-01 enter the same last-mile "
+            "chamber J_DG—taking down both legs simultaneously."
+        ),
+        "fault_type": "duct_cut",
+        "target_duct": "D-DG-EGB",
+        "cut_ratio": 0.45,
+    },
+    {
+        "id": "al_quoz_dying_gasp_vs_cut",
+        "title": "Premises Power Blackout ('Dying Gasp') vs. Fibre Cut Disambiguation (Al Quoz)",
+        "category": "GPON / Smart-Grid Triage",
+        "operators": ["vi_india", "du_converged", "constl_fiber"],
+        "summary": (
+            "24 industrial ONTs and smart-grid modems in Al Quoz Industrial Area drop offline within 800ms, followed "
+            "by gNB-DSO-04 AC mains failure. Instead of dispatching a fibre splicing crew, the copilot correlates "
+            "TR-069/OLT 'dying-gasp' power-off frames and VIAVI OTDR clean continuity trace on CBL-QZ-AQI-01 to prove "
+            "a substation power outage—cancelling an unnecessary OSP fibre truck roll."
+        ),
+        "fault_type": "power_outage",
+        "target_node": "C_AQI",
+        "target_cable": "CBL-QZ-AQI-01",
+    },
+    {
+        "id": "dso_optical_degradation",
+        "title": "Pre-Failure DWDM Optical OSNR & Pre-FEC BER Degradation (Silicon Oasis AI DC)",
+        "category": "Predictive Optical / DCI Assurance",
+        "operators": ["pccw_subsea", "constl_fiber", "du_converged"],
+        "summary": (
+            "Before any hard link down occurs on Oasis Sovereign AI DC's 100G DCI wavelength (OCH-SODC-AIR), Nokia NSP "
+            "streaming telemetry reports Pre-FEC BER degrading from 1.2e-6 to 8.4e-4 and OSNR dropping 4.8 dB due to "
+            "a high-loss pinched splice on CBL-AIR-DSO-01—allowing proactive hitless wavelength reroute via Karama."
+        ),
+        "fault_type": "optical_degradation",
+        "target_cable": "CBL-AIR-DSO-01",
+        "cut_ratio": 0.38,
+    },
+    {
+        "id": "ran_site_battery_lvd_countdown",
+        "title": "5G Hub Site Rectifier AC Mains Loss & Battery LVD Countdown (gNB-BB-01)",
+        "category": "Mobile RAN / Site Power",
+        "operators": ["du_converged", "vi_india"],
+        "summary": (
+            "Commercial 3-phase AC mains fails at Business Bay 5G Hub site (gNB-BB-01). Ericsson ENM reports "
+            "rectifier AC loss and DC bus discharging on VRLA battery bank (44.1V, LVD cut-off at 43.2V, 36 mins "
+            "remaining). If LVD trips, gNB-BB-01 and 2 daisy-chained 5G tail sites (9 cells total) will go dark. "
+            "Copilot correlates 3GPP PM counters and dispatches mobile diesel generator before LVD disconnect."
+        ),
+        "fault_type": "ran_battery_lvd",
+        "target_node": "RAN_BB_HUB",
+    },
+    {
+        "id": "eband_microwave_rain_fade",
+        "title": "80 GHz E-Band Microwave Rain-Fade vs. Hardware Fault (Academic City gNB-DSO-04)",
+        "category": "Mobile RAN / Microwave Transport",
+        "operators": ["vi_india", "du_converged"],
+        "summary": (
+            "Intense convective rain squall (42 mm/hr) crosses Silicon Oasis & Academic City. Microwave link "
+            "MW-DSO-ACAD-80G drops RSL from -38 dBm to -69 dBm and downshifts ACM modulation from 1024QAM (10 Gbps) "
+            "to QPSK (650 Mbps). Copilot correlates correlated weather fade across adjacent links and suppresses "
+            "a false ODU/transceiver hardware replacement truck roll."
+        ),
+        "fault_type": "microwave_rain_fade",
+        "target_node": "RAN_DSO_MW1",
+    },
+    {
+        "id": "pccw_subsea_shunt_fault",
+        "title": "Subsea Wet-Plant Repeater Shunt Fault & C-OTDR Localization (Jebel Ali CLS)",
+        "category": "Subsea Wet-Plant / Wholesale DCI",
+        "operators": ["pccw_subsea", "du_converged"],
+        "summary": (
+            "Power Feed Equipment (PFE-JBL-01) at Jebel Ali Cable Landing Station detects a high-resistance insulation "
+            "shunt fault on subsea cable SUBSEA-FALCON-JBL-MUM (+4,120V drops to +2,890V at 0.95A constant current). "
+            "Coherent OTDR (C-OTDR) localizes the wet-plant shunt 14.2 km seaward of Repeater R07 (Span 7-8, 68m depth). "
+            "Copilot switches PFE to single-end feeding and reroutes 400G DCI traffic over diverse terrestrial/subsea path."
+        ),
+        "fault_type": "subsea_shunt",
+        "target_node": "JBL",
+    },
+]
+
+# Subsea Wet-Plant System (for PCCW Global / e& Cable Landing Station)
+SUBSEA_SYSTEMS: list[dict] = [
+    {
+        "id": "SUBSEA-FALCON-JBL-MUM",
+        "name": "FALCON-X Gulf Subsea Express (Jebel Ali CLS <->Fujairah <-> Mumbai)",
+        "cls_node": "JBL",
+        "pfe_id": "PFE-JBL-01",
+        "total_length_km": 1940.0,
+        "repeater_count": 28,
+        " repeater_spacing_km": 68.5,
+        "branching_unit": "BU-HORMUZ-01",
+        "design_capacity_tbps": 48.0,
+        "carried_services": ["SVC-JLC-WAVE-100G"],
+    }
+]
+

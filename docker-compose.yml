@@ -1,0 +1,36 @@
+name: netops-copilot
+
+services:
+  db:
+    build: ./infra/db
+    environment:
+      POSTGRES_USER: noc
+      POSTGRES_PASSWORD: noc
+      POSTGRES_DB: noc
+    ports: ["5433:5432"]
+    volumes: ["dbdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noc"]
+      interval: 5s
+      retries: 20
+
+  kafka:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 512M
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://localhost:19092
+    ports: ["19092:9092"]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      retries: 30
+
+volumes:
+  dbdata:
