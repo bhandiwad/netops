@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from shared.sor_codec import parse_sor_bytes
@@ -131,6 +132,33 @@ async def _startup() -> None:
         await sync_all_connectors()
     except Exception:
         pass
+
+
+@app.get("/", response_class=HTMLResponse)
+async def backend_landing_page() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pandita — Assurance Backend API (:8002)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; max-width: 760px; margin: 40px auto; padding: 0 24px; color: #111827; line-height: 1.55; background: #f8f9fb; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 22px 24px; }
+    h1 { font-size: 20px; margin: 0 0 6px 0; }
+    p { font-size: 13.5px; color: #4b5563; margin: 0 0 14px 0; }
+    .btn { display: inline-block; padding: 7px 14px; border-radius: 8px; background: #111827; color: #fff; text-decoration: none; font-size: 12.5px; font-weight: 500; margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Fibre Assurance &amp; NOC Backend API (:8002)</h1>
+    <p>Core correlation, PostGIS slack localization, binary <code>.sor</code> parsing, and northbound orchestration engine.</p>
+    <a class="btn" href="/docs">Open API Swagger (/docs)</a>
+    <a class="btn" style="background:#374151;" href="/api/v1/overview">View Live JSON State (/api/v1/overview)</a>
+    <a class="btn" style="background:#4b5563;" href="http://127.0.0.1:5173">Open Web UI (:5173)</a>
+  </div>
+</body>
+</html>"""
 
 
 @app.get("/api/v1/overview")

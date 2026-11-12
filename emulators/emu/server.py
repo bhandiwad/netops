@@ -31,6 +31,7 @@ import httpx
 from aiokafka import AIOKafkaProducer
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -585,6 +586,62 @@ class FaultInjectRequest(BaseModel):
     target_id: str | None = None   # cable_id, duct_id, or node_id
     cut_ratio: float = 0.55
     skip_webhook: bool = False
+
+
+@app.get("/", response_class=HTMLResponse)
+async def emulator_landing_page() -> str:
+    sample_cable = CABLES[0]["id"] if CABLES else "sample"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pandita — Multi-OEM Network Emulator (:8001)</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; max-width: 880px; margin: 40px auto; padding: 0 24px; color: #111827; line-height: 1.55; background: #f8f9fb; }}
+    .card {{ background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 22px 24px; margin-bottom: 18px; }}
+    h1 {{ font-size: 20px; margin: 0 0 4px 0; }}
+    h2 {{ font-size: 14px; margin: 0 0 12px 0; color: #111827; }}
+    p {{ margin: 0 0 12px 0; font-size: 13.5px; color: #4b5563; }}
+    .pill {{ display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: #ecfdf5; color: #047857; }}
+    ul {{ list-style: none; padding: 0; margin: 0; }}
+    li {{ padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; display: flex; justify-content: space-between; gap: 12px; }}
+    li:last-child {{ border-bottom: none; }}
+    a {{ color: #1d4ed8; text-decoration: none; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12.5px; }}
+    a:hover {{ text-decoration: underline; }}
+    .btn {{ display: inline-block; padding: 7px 14px; border-radius: 8px; background: #111827; color: #fff !important; font-family: inherit; font-weight: 500; font-size: 12.5px; margin-right: 8px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h1>Multi-OEM Telco Lab Emulator (:8001)</h1>
+      <span class="pill">● Running ({len(ACTIVE_ALARMS)} active alarms)</span>
+    </div>
+    <p>Simulates 12 vendor network, GIS, OTDR, and ITSM interfaces so you can inspect raw protocol payloads, download binary <code>.sor</code> files, or trigger faults directly via API.</p>
+    <div style="margin-top:14px;">
+      <a class="btn" href="/docs">Open Interactive Swagger API (/docs)</a>
+      <a class="btn" style="background:#4b5563;" href="http://127.0.0.1:5173">Back to NOC UI (:5173)</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Live Emulated Vendor Endpoints (Click to Inspect)</h2>
+    <ul>
+      <li><span><strong>Emulator Health &amp; Scenarios</strong></span> <a href="/emulator/status">/emulator/status</a></li>
+      <li><span><strong>Lepton GIS</strong> · OGC WFS GeoJSON Cables</span> <a href="/lepton-gis/wfs?typeName=osp:cables">/lepton-gis/wfs?typeName=osp:cables</a></li>
+      <li><span><strong>VIAVI / EXFO OTDR</strong> · Parsed SR-4731 Trace JSON</span> <a href="/viavi-onmsi/api/v1/traces/{sample_cable}/parsed">/viavi-onmsi/api/v1/traces/{sample_cable}/parsed</a></li>
+      <li><span><strong>VIAVI / EXFO OTDR</strong> · Raw Binary <code>.sor</code> File</span> <a href="/viavi-onmsi/api/v1/traces/{sample_cable}.sor">/viavi-onmsi/api/v1/traces/{sample_cable}.sor</a></li>
+      <li><span><strong>Ciena MCP</strong> · DWDM Wavelengths &amp; Routing</span> <a href="/ciena-mcp/nsa/api/v1/fres">/ciena-mcp/nsa/api/v1/fres</a></li>
+      <li><span><strong>Nokia NSP</strong> · OpenConfig OSNR &amp; Pre-FEC BER</span> <a href="/nokia-nsp/restconf/data/openconfig-optical">/nokia-nsp/restconf/data/openconfig-optical</a></li>
+      <li><span><strong>Ericsson ENM</strong> · 3GPP TS 32.435 5G PM XML</span> <a href="/ericsson-enm/api/v1/pm-counters.xml">/ericsson-enm/api/v1/pm-counters.xml</a></li>
+      <li><span><strong>Subsea CLS</strong> · PFE High-Voltage &amp; Repeater Telemetry</span> <a href="/subsea-cls/api/v1/telemetry">/subsea-cls/api/v1/telemetry</a></li>
+      <li><span><strong>Comviva BSS</strong> · Enterprise Customers &amp; SLAs</span> <a href="/comviva-bss/tmf-api/customerManagement/v4/customer">/comviva-bss/tmf-api/customerManagement/v4/customer</a></li>
+      <li><span><strong>ServiceNow ITSM / FSM</strong> · Created Work Orders</span> <a href="/servicenow/api/now/table/wm_order">/servicenow/api/now/table/wm_order</a></li>
+      <li><span><strong>Jira Service Management</strong> · Created Master Issues</span> <a href="/jira/rest/api/3/issue">/jira/rest/api/3/issue</a></li>
+    </ul>
+  </div>
+</body>
+</html>"""
 
 
 @app.get("/emulator/status")
