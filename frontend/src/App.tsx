@@ -1,21 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import {
   GitBranch,
-  Globe,
-  KeyRound,
   Layers,
   Moon,
-  Network,
   PlugZap,
   Radio,
   RefreshCw,
+  SlidersHorizontal,
   Sun,
 } from 'lucide-react';
 import { nocApi } from './api/client';
 import { ConnectorEditorModal, LlmSettingsModal } from './components/ConfigModals';
 import type {
   Connector,
-  CopilotTabId,
   OtdrTraceData,
   OverviewResponse,
   PrimaryNavId,
@@ -39,7 +36,6 @@ export const App: React.FC = () => {
 
   const [primaryNav, setPrimaryNav] = useState<PrimaryNavId>('workspace');
   const [stageTab, setStageTab] = useState<StageTabId>('map');
-  const [copilotTab, setCopilotTab] = useState<CopilotTabId>('diagnosis');
 
   const [selectedProfileId, setSelectedProfileId] = useState<string>('du_converged');
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('szr_canal_fibre_cut');
@@ -97,21 +93,20 @@ export const App: React.FC = () => {
 
   const handleTriggerScenario = async (scenarioId?: string) => {
     const sid = scenarioId || selectedScenarioId;
-    setBusyAction(`Simulating ${sid}...`);
+    setBusyAction('Simulating scenario...');
     try {
       await nocApi.triggerScenario(sid);
       await refreshOverview();
       setSelectedIncidentId(null);
       setInspectedOtdr(null);
       setPrimaryNav('workspace');
-      setCopilotTab('diagnosis');
     } finally {
       setBusyAction(null);
     }
   };
 
   const handleTriggerCutOnCable = async (cableId: string, cutRatio: number) => {
-    setBusyAction(`Cutting ${cableId} at ${Math.round(cutRatio * 100)}%...`);
+    setBusyAction(`Simulating cut on ${cableId}...`);
     try {
       await nocApi.triggerCableCut(cableId, cutRatio);
       await refreshOverview();
@@ -123,7 +118,7 @@ export const App: React.FC = () => {
   };
 
   const handleResetNetwork = async () => {
-    setBusyAction('Resetting network state...');
+    setBusyAction('Resetting network...');
     try {
       await nocApi.resetNetwork();
       setSelectedIncidentId(null);
@@ -145,8 +140,13 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleClearCable = () => {
+    setSelectedCableId(null);
+    setInspectedOtdr(null);
+  };
+
   const handleUploadSorFile = async (file: File) => {
-    setBusyAction(`Parsing SR-4731 ${file.name}...`);
+    setBusyAction(`Reading ${file.name}...`);
     try {
       const data = await nocApi.parseUploadedSor(file);
       setInspectedOtdr(data);
@@ -157,7 +157,7 @@ export const App: React.FC = () => {
   };
 
   const handleApproveActions = async (incidentId: string, actionIds?: string[]) => {
-    setBusyAction('Executing approved remediation actions...');
+    setBusyAction('Running approved actions...');
     try {
       await nocApi.approveIncidentActions(incidentId, actionIds);
       await refreshOverview();
@@ -167,7 +167,7 @@ export const App: React.FC = () => {
   };
 
   const handleRunStormBenchmark = async (stormSize: number = 10000) => {
-    setBusyAction(`Running ${stormSize.toLocaleString()}-alarm storm benchmark...`);
+    setBusyAction(`Running ${stormSize.toLocaleString()}-alarm test...`);
     try {
       const data = await nocApi.runStormBenchmark(stormSize);
       setBenchmarkResult(data);
@@ -181,7 +181,7 @@ export const App: React.FC = () => {
       setXmlPreview(null);
       return;
     }
-    setBusyAction('Fetching 3GPP TS 32.435 XML PM counters...');
+    setBusyAction('Loading XML telemetry...');
     try {
       const xml = await nocApi.get3gppXml();
       setXmlPreview(xml);
@@ -191,7 +191,7 @@ export const App: React.FC = () => {
   };
 
   const handleSaveLlmSettings = async () => {
-    setBusyAction('Updating AI model settings...');
+    setBusyAction('Saving model settings...');
     try {
       await nocApi.updateLlmSettings(
         llmProvider,
@@ -220,10 +220,10 @@ export const App: React.FC = () => {
 
   if (loading && !overview) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-sm font-medium text-indigo-600 dark:text-indigo-400">
-          <RefreshCw className="w-5 h-5 animate-spin" />
-          <span>Synchronizing 12 Telco OEM Connectors & PostGIS Digital Twin...</span>
+      <div className="min-h-screen bg-[#F8F9FB] dark:bg-[#0A0D14] text-slate-900 dark:text-slate-100 flex items-center justify-center">
+        <div className="flex items-center gap-2.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          <span>Loading network workspace...</span>
         </div>
       </div>
     );
@@ -244,39 +244,33 @@ export const App: React.FC = () => {
   const subseaSystems = overview.ran_telemetry?.subsea_systems || [];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
-      <header className="sticky top-0 z-30 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-6 py-3">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm">
-              <Network className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
-                  PANDITA AI
-                </span>
-                <span className="text-slate-300 dark:text-slate-700">•</span>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Autonomous NOC & Fibre Assurance Copilot
-                </span>
-              </div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-                Multi-Layer Fault Correlation, OTDR Physics & SRLG Resilience
-              </h1>
-            </div>
+    <div className="min-h-screen bg-[#F8F9FB] dark:bg-[#0A0D14] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
+      <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#0A0D14]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-6 h-14 flex items-center">
+        <div className="max-w-[1520px] w-full mx-auto flex items-center justify-between gap-4">
+          {/* Minimal Brand */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-slate-900 dark:bg-white" />
+            <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
+              Pandita
+            </span>
+            <span className="text-slate-300 dark:text-slate-700">/</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400 hidden sm:inline">
+              Fibre Assurance
+            </span>
           </div>
 
-          <nav className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+          {/* Clean 4-Item Navigation */}
+          <nav className="flex items-center gap-1 bg-slate-100/90 dark:bg-[#111622] p-1 rounded-lg border border-slate-200/60 dark:border-slate-800/80">
             {[
-              { id: 'workspace', label: 'Operations Workspace', icon: Layers },
+              { id: 'workspace', label: 'Operations', icon: Layers, badge: incidents.length || 0 },
               {
                 id: 'topology',
-                label: `Topology & SRLG (${srlgViolations.length})`,
+                label: 'Route Diversity',
                 icon: GitBranch,
+                badge: srlgViolations.length,
               },
-              { id: 'telemetry', label: '5G RAN, Optical & Subsea', icon: Radio },
-              { id: 'connectors', label: '12 OEMs & Storm Benchmark', icon: PlugZap },
+              { id: 'telemetry', label: 'Sites & Subsea', icon: Radio, badge: 0 },
+              { id: 'connectors', label: 'Integrations', icon: PlugZap, badge: 0 },
             ].map((item) => {
               const Icon = item.icon;
               const isActive = primaryNav === item.id;
@@ -284,71 +278,80 @@ export const App: React.FC = () => {
                 <button
                   key={item.id}
                   onClick={() => setPrimaryNav(item.id as PrimaryNavId)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
+                  className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
                     isActive
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
                   <span>{item.label}</span>
+                  {item.badge > 0 && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
+                        item.id === 'workspace'
+                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </nav>
 
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/90 border border-slate-200/70 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs">
-              <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <select
-                value={selectedProfileId}
-                onChange={(e) => setSelectedProfileId(e.target.value)}
-                className="bg-transparent text-slate-800 dark:text-slate-100 font-semibold focus:outline-none cursor-pointer"
-              >
-                {Object.values(profiles).map((p) => (
-                  <option
-                    key={p.id}
-                    value={p.id}
-                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
-                  >
-                    {p.short_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Compact Right Controls */}
+          <div className="flex items-center gap-2">
+            {busyAction && (
+              <span className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mr-1">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>{busyAction}</span>
+              </span>
+            )}
+
+            <select
+              value={selectedProfileId}
+              onChange={(e) => setSelectedProfileId(e.target.value)}
+              aria-label="Operator profile"
+              className="bg-slate-100/90 dark:bg-[#111622] border border-slate-200/70 dark:border-slate-800 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+            >
+              {Object.values(profiles).map((p) => (
+                <option
+                  key={p.id}
+                  value={p.id}
+                  className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                >
+                  {p.short_name}
+                </option>
+              ))}
+            </select>
 
             <button
               onClick={() => setShowLlmModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/70 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition"
-              title="Configure Anthropic Claude or OpenAI API Key"
+              className="p-1.5 rounded-lg border border-slate-200/70 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
+              title="Model settings"
             >
-              <KeyRound className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>{overview.llm_config?.api_key_configured ? 'LLM Live' : 'AI Key'}</span>
+              <SlidersHorizontal className="w-3.5 h-3.5" />
             </button>
 
             <button
               onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/70 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition"
-              title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+              className="p-1.5 rounded-lg border border-slate-200/70 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition"
+              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             >
               {theme === 'light' ? (
-                <Moon className="w-4 h-4 text-slate-700" />
+                <Moon className="w-3.5 h-3.5" />
               ) : (
-                <Sun className="w-4 h-4 text-amber-400" />
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
               )}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-5 space-y-5">
-        {busyAction && (
-          <div className="bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>{busyAction}</span>
-          </div>
-        )}
-
+      <main className="flex-1 max-w-[1520px] w-full mx-auto px-6 py-5">
         {primaryNav === 'workspace' && (
           <WorkspaceView
             overview={overview}
@@ -361,20 +364,20 @@ export const App: React.FC = () => {
             onSelectScenarioId={setSelectedScenarioId}
             stageTab={stageTab}
             onSelectStageTab={setStageTab}
-            copilotTab={copilotTab}
-            onSelectCopilotTab={setCopilotTab}
             selectedCableId={selectedCableId}
             displayedOtdr={displayedOtdr}
             displayedFaultLoc={displayedFaultLoc}
             srlgViolationCount={srlgViolations.length}
             theme={theme}
             busy={!!busyAction}
-            onTriggerScenario={() => handleTriggerScenario()}
+            onTriggerScenario={(sid) => handleTriggerScenario(sid)}
             onResetNetwork={handleResetNetwork}
             onSelectCable={handleSelectCable}
+            onClearCable={handleClearCable}
             onTriggerCutOnCable={handleTriggerCutOnCable}
             onUploadSorFile={handleUploadSorFile}
             onApproveActions={handleApproveActions}
+            onOpenRouteDiversity={() => setPrimaryNav('topology')}
           />
         )}
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import { Layers, Crosshair } from 'lucide-react';
+import { Crosshair, X } from 'lucide-react';
 
 interface OspMapProps {
   gis: {
@@ -14,6 +14,7 @@ interface OspMapProps {
   selectedCableId: string | null;
   theme?: 'light' | 'dark';
   onSelectCable: (cableId: string) => void;
+  onClearCable?: () => void;
   onTriggerCutOnCable: (cableId: string, cutRatio: number) => void;
 }
 
@@ -25,6 +26,7 @@ export const OspMap: React.FC<OspMapProps> = ({
   selectedCableId,
   theme = 'light',
   onSelectCable,
+  onClearCable,
   onTriggerCutOnCable,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -39,29 +41,44 @@ export const OspMap: React.FC<OspMapProps> = ({
   const showMobilePack = activeProfile?.active_packs?.includes('mobile_ran') ?? true;
   const isLight = theme === 'light';
 
-  // Initialize MapLibre GL map
+  const [mapError, setMapError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const map = new maplibregl.Map({
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: {
         version: 8,
         sources: {
-          'carto-light': {
+          'esri-light-base': {
             type: 'raster',
             tiles: [
-              'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-              'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap, © CARTO | Lepton SmartInventory WFS + PostGIS',
+            attribution: '© Esri, HERE, Garmin, OpenStreetMap',
           },
-          'carto-dark': {
+          'esri-light-ref': {
             type: 'raster',
             tiles: [
-              'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-              'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+            ],
+            tileSize: 256,
+          },
+          'esri-dark-base': {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+            ],
+            tileSize: 256,
+          },
+          'esri-dark-ref': {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
             ],
             tileSize: 256,
           },
@@ -70,27 +87,48 @@ export const OspMap: React.FC<OspMapProps> = ({
           {
             id: 'carto-light-layer',
             type: 'raster',
-            source: 'carto-light',
+            source: 'esri-light-base',
             minzoom: 0,
-            maxzoom: 20,
+            maxzoom: 19,
+            layout: { visibility: isLight ? 'visible' : 'none' },
+          },
+          {
+            id: 'carto-light-labels',
+            type: 'raster',
+            source: 'esri-light-ref',
+            minzoom: 0,
+            maxzoom: 19,
             layout: { visibility: isLight ? 'visible' : 'none' },
           },
           {
             id: 'carto-dark-layer',
             type: 'raster',
-            source: 'carto-dark',
+            source: 'esri-dark-base',
             minzoom: 0,
-            maxzoom: 20,
+            maxzoom: 19,
+            layout: { visibility: isLight ? 'none' : 'visible' },
+          },
+          {
+            id: 'carto-dark-labels',
+            type: 'raster',
+            source: 'esri-dark-ref',
+            minzoom: 0,
+            maxzoom: 19,
             layout: { visibility: isLight ? 'none' : 'visible' },
           },
         ],
       },
       center: [55.245, 25.155],
       zoom: 10.9,
-      pitch: 18,
+      pitch: 12,
     });
+    } catch (err) {
+      console.warn('WebGL map unavailable in this browser environment:', err);
+      setMapError('Interactive WebGL map requires hardware acceleration.');
+      return;
+    }
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'bottom-right');
     mapRef.current = map;
 
     return () => {
@@ -99,30 +137,36 @@ export const OspMap: React.FC<OspMapProps> = ({
     };
   }, []);
 
-  // Switch basemap tiles when theme changes
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    if (map.getLayer('carto-light-layer')) {
-      map.setLayoutProperty('carto-light-layer', 'visibility', isLight ? 'visible' : 'none');
-    }
-    if (map.getLayer('carto-dark-layer')) {
-      map.setLayoutProperty('carto-dark-layer', 'visibility', isLight ? 'none' : 'visible');
-    }
+    ['carto-light-layer', 'carto-light-labels'].forEach((lid) => {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(lid, 'visibility', isLight ? 'visible' : 'none');
+      }
+    });
+    ['carto-dark-layer', 'carto-dark-labels'].forEach((lid) => {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(lid, 'visibility', isLight ? 'none' : 'visible');
+      }
+    });
   }, [isLight]);
 
-  // Update GeoJSON sources & HTML markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     const renderLayers = () => {
-      if (map.getLayer('carto-light-layer')) {
-        map.setLayoutProperty('carto-light-layer', 'visibility', isLight ? 'visible' : 'none');
-      }
-      if (map.getLayer('carto-dark-layer')) {
-        map.setLayoutProperty('carto-dark-layer', 'visibility', isLight ? 'none' : 'visible');
-      }
+      ['carto-light-layer', 'carto-light-labels'].forEach((lid) => {
+        if (map.getLayer(lid)) {
+          map.setLayoutProperty(lid, 'visibility', isLight ? 'visible' : 'none');
+        }
+      });
+      ['carto-dark-layer', 'carto-dark-labels'].forEach((lid) => {
+        if (map.getLayer(lid)) {
+          map.setLayoutProperty(lid, 'visibility', isLight ? 'none' : 'visible');
+        }
+      });
 
       const cutCables = new Set<string>(
         activeIncident?.fault_location?.cut_cables ||
@@ -194,10 +238,10 @@ export const OspMap: React.FC<OspMapProps> = ({
           type: 'line',
           source: 'osp-ducts',
           paint: {
-            'line-color': ['case', ['!=', ['get', 'bridge'], ''], '#d97706', '#64748b'],
-            'line-width': ['case', ['!=', ['get', 'bridge'], ''], 3.2, 1.4],
+            'line-color': ['case', ['!=', ['get', 'bridge'], ''], '#d97706', '#94a3b8'],
+            'line-width': ['case', ['!=', ['get', 'bridge'], ''], 2.5, 1.2],
             'line-dasharray': [2, 2],
-            'line-opacity': 0.6,
+            'line-opacity': 0.55,
           },
         });
       }
@@ -219,8 +263,15 @@ export const OspMap: React.FC<OspMapProps> = ({
               '#4f46e5',
               'transparent',
             ],
-            'line-width': ['case', ['==', ['get', 'faulted'], 1], 11, ['==', ['get', 'selected'], 1], 8, 0],
-            'line-opacity': 0.3,
+            'line-width': [
+              'case',
+              ['==', ['get', 'faulted'], 1],
+              10,
+              ['==', ['get', 'selected'], 1],
+              8,
+              0,
+            ],
+            'line-opacity': 0.25,
             'line-blur': 3,
           },
         });
@@ -233,25 +284,25 @@ export const OspMap: React.FC<OspMapProps> = ({
               'case',
               ['==', ['get', 'faulted'], 1],
               '#e11d48',
+              ['==', ['get', 'selected'], 1],
+              '#4f46e5',
               ['==', ['get', 'role'], 'trunk'],
               '#0284c7',
               ['==', ['get', 'role'], 'dark'],
               '#7c3aed',
-              ['==', ['get', 'role'], 'ran_backhaul'],
-              '#2563eb',
-              '#059669',
+              '#0d9488',
             ],
             'line-width': [
               'case',
               ['==', ['get', 'faulted'], 1],
-              4.2,
+              4,
               ['==', ['get', 'selected'], 1],
-              3.8,
+              3.5,
               ['==', ['get', 'role'], 'trunk'],
-              2.8,
-              2.2,
+              2.6,
+              2,
             ],
-            'line-opacity': 0.9,
+            'line-opacity': 0.88,
           },
         });
 
@@ -279,7 +330,7 @@ export const OspMap: React.FC<OspMapProps> = ({
           source: 'slack-offset',
           paint: {
             'line-color': '#d97706',
-            'line-width': 2.5,
+            'line-width': 2,
             'line-dasharray': [2, 1.5],
           },
         });
@@ -300,22 +351,21 @@ export const OspMap: React.FC<OspMapProps> = ({
         (activeIncident?.impact?.impacted_ran_sites || []).map((r: any) => String(r.site_id || ''))
       );
 
-      // Manhole markers
+      // Subtle manhole dots
       if (showManholes) {
         (gis?.manholes || []).forEach((mh) => {
           if (mh.kind !== 'junction') return;
           const el = document.createElement('div');
           el.className =
-            'w-3 h-3 rounded-full bg-white dark:bg-slate-900 border-2 border-amber-500 hover:scale-150 transition-transform cursor-pointer shadow-sm';
-          el.title = `${mh.id} (${mh.name}) — Slack coil: ${mh.slack_coil_m}m`;
+            'w-2.5 h-2.5 rounded-full bg-white dark:bg-slate-900 border-2 border-amber-500 hover:scale-150 transition-transform cursor-pointer shadow-sm';
+          el.title = `${mh.name} (${mh.id}) · Slack loop: ${mh.slack_coil_m} m`;
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat([mh.lon, mh.lat])
             .setPopup(
-              new maplibregl.Popup({ offset: 10 }).setHTML(
-                `<div class="text-slate-900 text-xs font-sans p-1.5">
-                  <div class="font-bold">${mh.id}</div>
-                  <div class="text-slate-600">${mh.name}</div>
-                  <div class="text-amber-700 font-semibold mt-1">Splice Slack Loop: ${mh.slack_coil_m} m</div>
+              new maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+                `<div class="text-slate-900 text-xs font-sans px-1 py-0.5">
+                  <div class="font-semibold">${mh.name}</div>
+                  <div class="text-slate-500 font-mono text-[11px]">${mh.id} · ${mh.slack_coil_m} m slack</div>
                 </div>`
               )
             )
@@ -324,15 +374,24 @@ export const OspMap: React.FC<OspMapProps> = ({
         });
       }
 
-      // POPs, Customer Nodes & 5G RAN Sites
+      // Clean minimal markers for POPs, Customers & 5G Sites (labels only expand when impacted!)
       Object.entries(nodesObj).forEach(([nid, ninfo]: [string, any]) => {
         if (ninfo.kind === 'pop') {
           const el = document.createElement('div');
           el.className =
-            'px-2 py-0.5 rounded-md bg-slate-900 text-white border border-sky-400 text-[10px] font-mono font-semibold shadow-md cursor-pointer';
-          el.innerText = nid;
-          el.title = `${ninfo.name} (POP / Optical ROADM + Core Router)`;
-          const marker = new maplibregl.Marker({ element: el }).setLngLat([ninfo.lon, ninfo.lat]).addTo(map);
+            'w-3.5 h-3.5 rounded-full bg-slate-900 dark:bg-sky-400 border-2 border-white dark:border-slate-950 shadow-md hover:scale-125 transition-transform cursor-pointer';
+          el.title = `${ninfo.name} (${nid})`;
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([ninfo.lon, ninfo.lat])
+            .setPopup(
+              new maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+                `<div class="text-slate-900 text-xs font-sans px-1 py-0.5">
+                  <div class="font-semibold">${ninfo.name}</div>
+                  <div class="text-slate-500 font-mono text-[11px]">Core POP · ${nid}</div>
+                </div>`
+              )
+            )
+            .addTo(map);
           markersRef.current.push(marker);
         } else if (ninfo.kind === 'customer') {
           const isHit =
@@ -343,64 +402,90 @@ export const OspMap: React.FC<OspMapProps> = ({
               activeIncident.impact?.impacted_services?.some((s: any) =>
                 ninfo.name.toLowerCase().includes(s.customer_name.split(' ')[0].toLowerCase())
               ));
+
           const el = document.createElement('div');
-          el.className = `px-2 py-0.5 rounded-md border text-[10px] font-medium shadow-sm ${
-            isHit
-              ? 'bg-rose-600 border-white text-white font-semibold animate-pulse'
-              : 'bg-white/95 text-slate-800 border-emerald-500/80 dark:bg-slate-900/95 dark:text-emerald-200'
-          }`;
-          el.innerText = ninfo.name.split(' ').slice(0, 2).join(' ');
-          el.title = `${ninfo.name} (Enterprise Customer Site)`;
-          const marker = new maplibregl.Marker({ element: el }).setLngLat([ninfo.lon, ninfo.lat]).addTo(map);
+          if (isHit) {
+            el.className =
+              'px-2 py-0.5 rounded-full bg-rose-600 border-2 border-white text-white text-[10px] font-semibold shadow-md cursor-pointer';
+            el.innerText = ninfo.name.split(' ').slice(0, 2).join(' ');
+          } else {
+            el.className =
+              'w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-950 shadow-sm hover:scale-125 transition-transform cursor-pointer';
+          }
+          el.title = `${ninfo.name} (Customer Site)`;
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([ninfo.lon, ninfo.lat])
+            .setPopup(
+              new maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+                `<div class="text-slate-900 text-xs font-sans px-1 py-0.5">
+                  <div class="font-semibold">${ninfo.name}</div>
+                  <div class="text-slate-500 text-[11px]">Enterprise Site</div>
+                </div>`
+              )
+            )
+            .addTo(map);
           markersRef.current.push(marker);
         } else if (ninfo.kind === 'cellsite' && showMobilePack && showRanSites) {
           const isDown = impactedRanIds.has(nid);
           const el = document.createElement('div');
-          el.className = `px-2 py-0.5 rounded-full border text-[10px] font-mono font-semibold shadow-sm ${
-            isDown
-              ? 'bg-rose-600 border-white text-white animate-bounce'
-              : 'bg-indigo-600 text-white border-indigo-300'
-          }`;
-          el.innerText = `5G:${nid.replace('RAN_', '')}`;
-          el.title = ninfo.name;
-          const marker = new maplibregl.Marker({ element: el }).setLngLat([ninfo.lon, ninfo.lat]).addTo(map);
+          if (isDown) {
+            el.className =
+              'px-2 py-0.5 rounded-full bg-rose-600 border-2 border-white text-white text-[10px] font-mono font-semibold shadow-md cursor-pointer';
+            el.innerText = `5G · ${nid.replace('RAN_', '')}`;
+          } else {
+            el.className =
+              'w-2.5 h-2.5 rounded-full bg-indigo-500 border border-white dark:border-slate-950 shadow-sm hover:scale-125 transition-transform cursor-pointer';
+          }
+          el.title = `${ninfo.name} (5G Site)`;
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([ninfo.lon, ninfo.lat])
+            .setPopup(
+              new maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+                `<div class="text-slate-900 text-xs font-sans px-1 py-0.5">
+                  <div class="font-semibold">${ninfo.name}</div>
+                  <div class="text-slate-500 font-mono text-[11px]">5G Site · ${nid}</div>
+                </div>`
+              )
+            )
+            .addTo(map);
           markersRef.current.push(marker);
         }
       });
 
-      // Fault Localization Pin
+      // Active Fault Pin
       if (fl && fl.lat && fl.lon) {
         if (fl.naive_lat && fl.naive_lon && fl.dispatch_error_avoided_m > 5) {
           const naiveEl = document.createElement('div');
           naiveEl.className =
-            'px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 border border-white text-[10px] font-mono font-semibold shadow-md';
-          naiveEl.innerHTML = `Naive Uncorrected (+${fl.dispatch_error_avoided_m}m off)`;
-          const naiveMarker = new maplibregl.Marker({ element: naiveEl })
+            'px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 border border-white text-[10px] font-medium shadow-sm whitespace-nowrap';
+          naiveEl.innerHTML = `Raw OTDR (+${fl.dispatch_error_avoided_m}m off)`;
+          const naiveMarker = new maplibregl.Marker({ element: naiveEl, offset: [0, -18] })
             .setLngLat([fl.naive_lon, fl.naive_lat])
             .addTo(map);
           markersRef.current.push(naiveMarker);
         }
 
-        let badgeLabel = `✂️ CUT @ ${fl.corrected_trench_distance_m ?? 0}m`;
-        if (fl.dying_gasp_confirmed) badgeLabel = '⚡ AC MAINS BLACKOUT (NO CUT)';
-        else if (fl.dc_bus_voltage_v) badgeLabel = `🔋 BATTERY LVD (${fl.dc_bus_voltage_v}V · ${fl.battery_remaining_mins}m left)`;
-        else if (fl.mw_link_id) badgeLabel = `🌧️ 80GHz RAIN FADE (${fl.acm_state})`;
-        else if (fl.subsea_cable_id) badgeLabel = `🌊 SUBSEA PFE SHUNT (${fl.cotdr_shunt_distance_km}km)`;
+        let badgeLabel = `Fibre Cut · ${fl.corrected_trench_distance_m ?? 0} m`;
+        if (fl.dying_gasp_confirmed) badgeLabel = 'Power Outage · Cable Intact';
+        else if (fl.dc_bus_voltage_v)
+          badgeLabel = `Site Battery Low (${fl.battery_remaining_mins}m left)`;
+        else if (fl.mw_link_id) badgeLabel = 'Microwave Rain Fade';
+        else if (fl.subsea_cable_id) badgeLabel = `Subsea Fault · ${fl.cotdr_shunt_distance_km} km`;
 
         const faultEl = document.createElement('div');
         faultEl.className = 'relative flex items-center justify-center';
         faultEl.innerHTML = `
-          <div class="w-10 h-10 rounded-full bg-rose-500/40 fault-pulse-ring absolute"></div>
-          <div class="px-2.5 py-1 rounded-lg bg-rose-600 border-2 border-white text-white text-[11px] font-mono font-semibold shadow-xl relative z-10 whitespace-nowrap">
+          <div class="w-9 h-9 rounded-full bg-rose-500/35 fault-pulse-ring absolute"></div>
+          <div class="px-2.5 py-1 rounded-full bg-rose-600 border-2 border-white text-white text-[11px] font-semibold shadow-lg relative z-10 whitespace-nowrap">
             ${badgeLabel}
           </div>
         `;
-        const faultMarker = new maplibregl.Marker({ element: faultEl })
+        const faultMarker = new maplibregl.Marker({ element: faultEl, offset: [0, 18] })
           .setLngLat([fl.lon, fl.lat])
           .addTo(map);
         markersRef.current.push(faultMarker);
 
-        map.flyTo({ center: [fl.lon, fl.lat], zoom: 12.4, duration: 1000 });
+        map.flyTo({ center: [fl.lon, fl.lat], zoom: 12.8, duration: 900 });
       }
     };
 
@@ -409,44 +494,56 @@ export const OspMap: React.FC<OspMapProps> = ({
     } else {
       map.once('load', renderLayers);
     }
-  }, [gis, topology, activeIncident, selectedCableId, showDucts, showManholes, showRanSites, showMobilePack, isLight]);
+  }, [
+    gis,
+    topology,
+    activeIncident,
+    selectedCableId,
+    showDucts,
+    showManholes,
+    showRanSites,
+    showMobilePack,
+    isLight,
+  ]);
 
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-slate-200/80 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
       <div ref={mapContainerRef} className="w-full h-full" />
+      {mapError && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 p-4 text-center">
+          {mapError}
+        </div>
+      )}
 
-      {/* Clean Floating Layer Filter Bar */}
-      <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 rounded-xl px-3 py-1.5 text-xs shadow-sm">
-        <span className="text-slate-600 dark:text-slate-300 font-semibold flex items-center gap-1.5 mr-1">
-          <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Layers:
-        </span>
+      {/* Minimal Layer Pills */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 rounded-lg p-1 text-[11px] shadow-sm">
         <button
           onClick={() => setShowDucts(!showDucts)}
-          className={`px-2.5 py-0.5 rounded-lg font-medium transition ${
+          className={`px-2.5 py-1 rounded-md font-medium transition ${
             showDucts
-              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
           Ducts
         </button>
         <button
           onClick={() => setShowManholes(!showManholes)}
-          className={`px-2.5 py-0.5 rounded-lg font-medium transition ${
+          className={`px-2.5 py-1 rounded-md font-medium transition ${
             showManholes
-              ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-400/50'
-              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          Slack Chambers
+          Chambers
         </button>
         {showMobilePack && (
           <button
             onClick={() => setShowRanSites(!showRanSites)}
-            className={`px-2.5 py-0.5 rounded-lg font-medium transition ${
+            className={`px-2.5 py-1 rounded-md font-medium transition ${
               showRanSites
-                ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-400/50'
-                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             5G Sites
@@ -454,17 +551,40 @@ export const OspMap: React.FC<OspMapProps> = ({
         )}
       </div>
 
+      {/* Subtle Map Key */}
+      <div className="absolute top-3 right-3 z-10 hidden sm:flex items-center gap-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-600 dark:text-slate-300 shadow-sm">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-slate-900 dark:bg-sky-400" /> POP
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500" /> Customer
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-amber-500" /> Chamber
+        </span>
+        {showMobilePack && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-indigo-500" /> 5G
+          </span>
+        )}
+      </div>
+
       {/* Selected Cable Cut Bar */}
       {selectedCableId && (
-        <div className="absolute bottom-3 left-3 right-12 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-indigo-200 dark:border-indigo-800 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg">
+        <div className="absolute bottom-3 left-3 right-12 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
           <div className="flex items-center gap-2">
-            <Crosshair className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span className="font-mono font-semibold text-indigo-700 dark:text-indigo-300">{selectedCableId}</span>
-            <span className="text-slate-600 dark:text-slate-400">
-              Simulate cut at <strong className="font-mono text-slate-900 dark:text-white">{Math.round(cutRatioSlider * 100)}%</strong> along route:
+            <Crosshair className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span className="font-mono font-semibold text-slate-900 dark:text-white">
+              {selectedCableId}
+            </span>
+            <span className="text-slate-500 dark:text-slate-400">
+              Cut at{' '}
+              <strong className="font-mono text-slate-900 dark:text-white">
+                {Math.round(cutRatioSlider * 100)}%
+              </strong>
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <input
               type="range"
               min={0.15}
@@ -472,14 +592,23 @@ export const OspMap: React.FC<OspMapProps> = ({
               step={0.01}
               value={cutRatioSlider}
               onChange={(e) => setCutRatioSlider(parseFloat(e.target.value))}
-              className="w-28 accent-rose-600 cursor-pointer"
+              className="w-24 accent-rose-600 cursor-pointer"
             />
             <button
               onClick={() => onTriggerCutOnCable(selectedCableId, cutRatioSlider)}
-              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold shadow-sm transition"
+              className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium transition"
             >
-              Simulate Fibre Cut
+              Simulate Cut
             </button>
+            {onClearCable && (
+              <button
+                onClick={onClearCable}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                title="Clear selection"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       )}
