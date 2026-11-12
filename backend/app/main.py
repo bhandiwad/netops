@@ -1,14 +1,16 @@
 """NOC Copilot FastAPI Application.
 
-Runs UDP Syslog (:15514) and UDP SNMPv2c Trap (:15162) listeners, syncs
-multi-OEM connectors into PostgreSQL/PostGIS, correlates multi-layer alarms,
-parses binary SR-4731 .sor OTDR files, audits SRLG route diversity, and
-executes engineer-approved actions across Jira, ServiceNow, and Ciena MCP.
+Runs UDP Syslog (:15514), UDP SNMPv2c Trap (:15162), and Redpanda/Kafka consumers,
+syncs southbound OEM connectors into normalized PostgreSQL/PostGIS tables,
+correlates multi-layer alarms via causal graph clustering + pluggable classifiers,
+parses binary SR-4731 .sor OTDR files, audits SRLG diversity, and executes
+human-approved northbound actions.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
 import httpx
@@ -17,21 +19,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from shared.sor_codec import parse_sor_bytes
-from .db import get_conn, init_db, log_audit
-from .engine import (
+from .adapters.registry import (
+    DatabaseBackedOtdrAdapter,
+    get_connectors_map,
+    get_emulator_control_base_url,
+    sync_all_connectors,
+)
+from .correlation import (
     LLM_CONFIG,
-    audit_all_srlg_diversity,
-    build_multilayer_dependency_graph,
-    correlate_alarms_into_incident,
+    correlate_alarms_into_incidents,
     execute_incident_actions,
     generate_ai_copilot_analysis,
     get_incident_detail,
-    locate_fault_on_cable_postgis,
-    run_10k_alarm_storm_benchmark,
-    sync_all_connectors,
 )
+from .db import get_conn, init_db, log_audit
+from .routing import (
+    audit_all_srlg_diversity,
+    build_multilayer_dependency_graph,
+    run_10k_alarm_storm_benchmark,
+)
+from .schemas import (
+    ConnectorUpdatePayload,
+    LlmConfigPayload,
+    StormBenchmarkPayload,
+    TriggerFaultPayload,
+)
+from .spatial import locate_fault_on_cable_postgis
 
-app = FastAPI(title="Telco Network Operations Copilot API", version="2.0.0")
+app = FastAPI(title="Telco Network Operations Copilot API", version="2.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,9 +56,8 @@ app.add_middleware(
 
 RECENT_WIRE_PACKETS: list[dict[str, Any]] = []
 LAST_BENCHMARK_RESULT: dict[str, Any] | None = None
-EMULATOR_BASE = "http://127.0.0.1:8001"
-KAFKA_BOOTSTRAP = "127.0.0.1:19092"
-KAFKA_TOPIC = "noc.alarms.raw"
+KAFKA_BOOTSTRAP = os.getenv("NOC_KAFKA_BOOTSTRAP", "127.0.0.1:19092")
+KAFKA_TOPIC = os.getenv("NOC_KAFKA_TOPIC", "noc.alarms.raw")
 
 
 async def _kafka_consumer_worker() -> None:
@@ -72,7 +86,6 @@ async def _kafka_consumer_worker() -> None:
             await consumer.stop()
     except Exception:
         pass
-
 
 
 class _SyslogUdpProtocol(asyncio.DatagramProtocol):
@@ -114,7 +127,6 @@ async def _startup() -> None:
     except Exception:
         pass
     asyncio.create_task(_kafka_consumer_worker())
-    # Initial connector sync
     try:
         await sync_all_connectors()
     except Exception:
@@ -154,26 +166,30 @@ async def get_overview() -> dict[str, Any]:
     srlg_findings = audit_all_srlg_diversity()
     dep_graph = build_multilayer_dependency_graph()
 
-
-    # Fetch emulator status (scenarios, profiles, active tickets)
+    cmap = {c["id"]: c for c in connectors}
+    emu_base = get_emulator_control_base_url()
     emu_status: dict[str, Any] = {}
     jira_issues: list[dict[str, Any]] = []
     snow_incidents: list[dict[str, Any]] = []
     snow_work_orders: list[dict[str, Any]] = []
+
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
-            r_emu = await client.get(f"{EMULATOR_BASE}/emulator/status")
+            r_emu = await client.get(f"{emu_base}/emulator/status")
             if r_emu.status_code == 200:
                 emu_status = r_emu.json()
-            r_jira = await client.get(f"{EMULATOR_BASE}/jira/rest/api/3/issue")
-            if r_jira.status_code == 200:
-                jira_issues = r_jira.json().get("issues", [])
-            r_sinc = await client.get(f"{EMULATOR_BASE}/servicenow/api/now/table/incident")
-            if r_sinc.status_code == 200:
-                snow_incidents = r_sinc.json().get("result", [])
-            r_swo = await client.get(f"{EMULATOR_BASE}/servicenow/api/now/table/wm_order")
-            if r_swo.status_code == 200:
-                snow_work_orders = r_swo.json().get("result", [])
+            if "jira_sm" in cmap:
+                r_jira = await client.get(cmap["jira_sm"]["endpoint_url"].rstrip("/") + "/rest/api/3/issue")
+                if r_jira.status_code == 200:
+                    jira_issues = r_jira.json().get("issues", [])
+            if "servicenow_itsm" in cmap:
+                snow_base = cmap["servicenow_itsm"]["endpoint_url"].rstrip("/")
+                r_sinc = await client.get(f"{snow_base}/api/now/table/incident")
+                if r_sinc.status_code == 200:
+                    snow_incidents = r_sinc.json().get("result", [])
+                r_swo = await client.get(f"{snow_base}/api/now/table/wm_order")
+                if r_swo.status_code == 200:
+                    snow_work_orders = r_swo.json().get("result", [])
     except Exception:
         pass
 
@@ -192,7 +208,6 @@ async def get_overview() -> dict[str, Any]:
         "dependency_graph": dep_graph,
         "last_benchmark": LAST_BENCHMARK_RESULT,
         "srlg_findings": srlg_findings,
-
         "incidents": [i for i in incidents if i is not None],
         "alarms": alarms,
         "runbooks": runbooks,
@@ -219,38 +234,41 @@ class Tmf642AlarmBatch(BaseModel):
 
 @app.post("/api/v1/ingest/tmf642")
 async def ingest_tmf642(batch: Tmf642AlarmBatch) -> dict[str, Any]:
-    inc = await correlate_alarms_into_incident(batch.alarms)
-    return {"status": "correlated", "incident_id": inc["incident_id"] if inc else None}
-
-
-class TriggerFaultRequest(BaseModel):
-    scenario_id: str | None = None
-    fault_type: str | None = None
-    target_id: str | None = None
-    cut_ratio: float = 0.62
+    incidents = await correlate_alarms_into_incidents(batch.alarms)
+    return {
+        "status": "correlated",
+        "incident_id": incidents[0]["incident_id"] if incidents else None,
+        "incident_ids": [i["incident_id"] for i in incidents],
+    }
 
 
 @app.post("/api/v1/faults/trigger")
-async def trigger_fault(req: TriggerFaultRequest) -> dict[str, Any]:
+async def trigger_fault(req: TriggerFaultPayload) -> dict[str, Any]:
+    emu_base = get_emulator_control_base_url()
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.post(
-            f"{EMULATOR_BASE}/emulator/faults/inject",
-            json=req.model_dump(),
+            f"{emu_base}/emulator/faults/inject",
+            json={**req.model_dump(), "skip_webhook": True},
         )
         if r.status_code != 200:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         data = r.json()
 
     alarms = data.get("alarms", [])
-    incident = await correlate_alarms_into_incident(alarms)
+    incidents = await correlate_alarms_into_incidents(alarms)
     await sync_all_connectors()
-    return {"incident": incident, "alarms_emitted": len(alarms)}
+    return {
+        "incident": incidents[0] if incidents else None,
+        "incidents": incidents,
+        "alarms_emitted": len(alarms),
+    }
 
 
 @app.post("/api/v1/faults/reset")
 async def reset_faults() -> dict[str, Any]:
+    emu_base = get_emulator_control_base_url()
     async with httpx.AsyncClient(timeout=6.0) as client:
-        await client.post(f"{EMULATOR_BASE}/emulator/faults/clear")
+        await client.post(f"{emu_base}/emulator/faults/clear")
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM alarms")
@@ -302,15 +320,8 @@ async def trigger_connector_sync() -> dict[str, Any]:
     return await sync_all_connectors()
 
 
-class UpdateConnectorRequest(BaseModel):
-    endpoint_url: str
-    mode: str = "emulator"
-    enabled: bool = True
-    config_json: dict[str, Any] = {}
-
-
 @app.put("/api/v1/connectors/{connector_id}")
-async def update_connector(connector_id: str, req: UpdateConnectorRequest) -> dict[str, Any]:
+async def update_connector(connector_id: str, req: ConnectorUpdatePayload) -> dict[str, Any]:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -330,14 +341,8 @@ async def update_connector(connector_id: str, req: UpdateConnectorRequest) -> di
     return dict(row)
 
 
-class LlmConfigRequest(BaseModel):
-    provider: str = "anthropic"
-    model: str = "claude-sonnet-4-20250514"
-    api_key: str = ""
-
-
 @app.post("/api/v1/settings/llm")
-async def update_llm_settings(req: LlmConfigRequest) -> dict[str, Any]:
+async def update_llm_settings(req: LlmConfigPayload) -> dict[str, Any]:
     LLM_CONFIG["provider"] = req.provider
     LLM_CONFIG["model"] = req.model
     if req.api_key.strip():
@@ -351,11 +356,11 @@ async def update_llm_settings(req: LlmConfigRequest) -> dict[str, Any]:
 
 @app.get("/api/v1/otdr/cable/{cable_id}")
 async def inspect_cable_otdr(cable_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        r = await client.get(f"{EMULATOR_BASE}/viavi-onmsi/api/v1/traces/{cable_id}.sor")
-        if r.status_code != 200:
-            raise HTTPException(status_code=404, detail=f"No .sor trace for {cable_id}")
-        parsed = parse_sor_bytes(r.content)
+    otdr_adapter = DatabaseBackedOtdrAdapter()
+    res = await otdr_adapter.fetch_and_parse_sor(cable_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail=f"No .sor trace available for {cable_id}")
+    parsed, byte_len = res
     loc = None
     if parsed.fault_distance_optical_m is not None:
         loc = locate_fault_on_cable_postgis(cable_id, parsed.fault_distance_optical_m)
@@ -370,7 +375,7 @@ async def inspect_cable_otdr(cable_id: str) -> dict[str, Any]:
         "range_m": parsed.range_m,
         "sample_spacing_m": parsed.sample_spacing_m,
         "crc_valid": parsed.crc_valid,
-        "binary_size_bytes": len(r.content),
+        "binary_size_bytes": byte_len,
         "fault_distance_optical_m": parsed.fault_distance_optical_m,
         "key_events": [vars(e) for e in parsed.key_events],
         "trace_points_db": parsed.trace_points_db[::4],
@@ -379,7 +384,6 @@ async def inspect_cable_otdr(cable_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/v1/otdr/parse-sor")
-
 async def upload_and_parse_sor(file: UploadFile = File(...)) -> dict[str, Any]:
     raw = await file.read()
     parsed = parse_sor_bytes(raw)
@@ -403,12 +407,8 @@ async def upload_and_parse_sor(file: UploadFile = File(...)) -> dict[str, Any]:
     }
 
 
-class StormBenchmarkRequest(BaseModel):
-    storm_size: int = 10000
-
-
 @app.post("/api/v1/benchmark/storm")
-async def execute_storm_benchmark(req: StormBenchmarkRequest) -> dict[str, Any]:
+async def execute_storm_benchmark(req: StormBenchmarkPayload) -> dict[str, Any]:
     global LAST_BENCHMARK_RESULT
     size = max(1000, min(50000, req.storm_size))
     res = run_10k_alarm_storm_benchmark(size)
@@ -418,7 +418,10 @@ async def execute_storm_benchmark(req: StormBenchmarkRequest) -> dict[str, Any]:
 
 @app.get("/api/v1/telemetry/3gpp-xml")
 async def fetch_3gpp_xml_preview() -> dict[str, Any]:
+    cmap = get_connectors_map(only_enabled=True)
+    if "ericsson_enm" not in cmap:
+        return {"xml": ""}
+    enm_base = cmap["ericsson_enm"]["endpoint_url"].rstrip("/")
     async with httpx.AsyncClient(timeout=4.0) as client:
-        r = await client.get(f"{EMULATOR_BASE}/ericsson-enm/api/v1/pm-counters.xml")
+        r = await client.get(f"{enm_base}/pm-counters.xml")
         return {"xml": r.text if r.status_code == 200 else ""}
-

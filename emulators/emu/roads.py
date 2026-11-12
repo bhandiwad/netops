@@ -1,8 +1,13 @@
 """Builds and caches road-following duct geometry, manholes, splice closures,
 and cable optical-vs-trench length profiles for the Lepton GIS and VIAVI/EXFO emulators.
+
+Validates a SHA-256 topology fingerprint so changing `TELCO_DATASET_PATH` or adding
+new ducts/cables automatically recomputes changed segments while reusing cached OSRM
+polylines for unchanged ducts.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -10,12 +15,19 @@ from typing import Any
 
 import httpx
 from pyproj import Geod
-from shapely.geometry import LineString, Point
 
 from .spec import CABLES, DUCTS, NODES
 
 GEOD = Geod(ellps="WGS84")
 CACHE_PATH = Path(__file__).parent / "road_cache.json"
+
+
+def _topology_fingerprint() -> str:
+    canonical = json.dumps(
+        {"nodes": NODES, "ducts": DUCTS, "cables": CABLES},
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 def _geodesic_length_m(coords_lon_lat: list[list[float]]) -> float:
@@ -63,9 +75,16 @@ def _fallback_road_curve(lon_a: float, lat_a: float, lon_b: float, lat_b: float,
 
 def build_or_load_osp_geometry() -> dict[str, Any]:
     """Return complete OSP GIS dataset: ducts, manholes, and cables with splice/slack profiles."""
+    fp = _topology_fingerprint()
+    existing_duct_coords: dict[str, list[list[float]]] = {}
     if CACHE_PATH.exists():
         try:
-            return json.loads(CACHE_PATH.read_text())
+            cached = json.loads(CACHE_PATH.read_text())
+            if cached.get("fingerprint") == fp:
+                return cached
+            for cd in cached.get("ducts", []):
+                if cd.get("id") and cd.get("coordinates"):
+                    existing_duct_coords[cd["id"]] = cd["coordinates"]
         except Exception:
             pass
 
@@ -78,22 +97,25 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
             nb = NODES[d["b"]]
             lon_a, lat_a = na["lon"], na["lat"]
             lon_b, lat_b = nb["lon"], nb["lat"]
-            coords: list[list[float]] | None = None
-            try:
-                url = (
-                    f"https://router.project-osrm.org/route/v1/driving/"
-                    f"{lon_a},{lat_a};{lon_b},{lat_b}?overview=full&geometries=geojson"
-                )
-                r = client.get(url)
-                if r.status_code == 200:
-                    data = r.json()
-                    if data.get("routes"):
-                        coords = data["routes"][0]["geometry"]["coordinates"]
-                        # ensure endpoints match exact node coordinates
-                        coords[0] = [lon_a, lat_a]
-                        coords[-1] = [lon_b, lat_b]
-            except Exception:
+            coords: list[list[float]] | None = existing_duct_coords.get(d["id"])
+            if coords and (coords[0] != [lon_a, lat_a] or coords[-1] != [lon_b, lat_b]):
                 coords = None
+
+            if not coords:
+                try:
+                    url = (
+                        f"https://router.project-osrm.org/route/v1/driving/"
+                        f"{lon_a},{lat_a};{lon_b},{lat_b}?overview=full&geometries=geojson"
+                    )
+                    r = client.get(url)
+                    if r.status_code == 200:
+                        data = r.json()
+                        if data.get("routes"):
+                            coords = data["routes"][0]["geometry"]["coordinates"]
+                            coords[0] = [lon_a, lat_a]
+                            coords[-1] = [lon_b, lat_b]
+                except Exception:
+                    coords = None
 
             if not coords or len(coords) < 2:
                 coords = _fallback_road_curve(lon_a, lat_a, lon_b, lat_b)
@@ -105,7 +127,7 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
                 "node_b": d["b"],
                 "bridge": d.get("bridge"),
                 "trench_length_m": trench_len_m,
-                "coordinates": coords,  # [[lon, lat], ...]
+                "coordinates": coords,
             }
             ducts_out.append(duct_rec)
             duct_map[(d["a"], d["b"])] = duct_rec
@@ -116,7 +138,6 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
                 "coordinates": list(reversed(coords)),
             }
 
-    # Build manholes at every node + intermediate splice chambers every ~1.8 km on long ducts
     manholes: list[dict[str, Any]] = []
     node_manhole_slack: dict[str, float] = {}
     for nid, ninfo in NODES.items():
@@ -132,7 +153,6 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
             "slack_coil_m": slack_m,
         })
 
-    # Build cable geometries, duct-sequence, splice closures, and total optical vs trench lengths
     cables_out: list[dict[str, Any]] = []
     for c in CABLES:
         path_nodes = c["path"]
@@ -145,7 +165,6 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
         cum_trench_m = 0.0
         cum_optical_m = 0.0
 
-        # Launch slack at start POP/node
         start_slack = node_manhole_slack.get(path_nodes[0], 20.0)
         cum_optical_m += start_slack
         splices.append({
@@ -163,7 +182,6 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
             u, v = path_nodes[idx], path_nodes[idx + 1]
             d_edge = duct_map.get((u, v))
             if d_edge is None:
-                # Direct segment if no explicit duct defined
                 coords_seg = _fallback_road_curve(
                     NODES[u]["lon"], NODES[u]["lat"], NODES[v]["lon"], NODES[v]["lat"], steps=8
                 )
@@ -216,6 +234,7 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
         })
 
     result = {
+        "fingerprint": fp,
         "nodes": NODES,
         "ducts": ducts_out,
         "manholes": manholes,

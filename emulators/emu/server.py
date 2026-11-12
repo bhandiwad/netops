@@ -249,10 +249,13 @@ def _send_udp_snmp_trap( trap_payload: dict[str, Any]) -> None:
         pass
 
 
-async def _publish_alarms_to_kafka_and_webhook(alarms: list[dict[str, Any]]) -> None:
+async def _publish_alarms_to_kafka_and_webhook(
+    alarms: list[dict[str, Any]],
+    skip_webhook: bool = False,
+) -> None:
     # 1. Publish to Redpanda / Kafka
     try:
-        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP)
+        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP, request_timeout_ms=3000)
         await producer.start()
         try:
             for a in alarms:
@@ -266,12 +269,13 @@ async def _publish_alarms_to_kafka_and_webhook(alarms: list[dict[str, Any]]) -> 
     except Exception:
         pass
 
-    # 2. Push TMF642 AlarmCreateEvent webhook to Copilot backend
-    try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            await client.post(COPILOT_WEBHOOK_URL, json={"alarms": alarms})
-    except Exception:
-        pass
+    # 2. Push TMF642 AlarmCreateEvent webhook to Copilot backend when invoked externally
+    if not skip_webhook:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                await client.post(COPILOT_WEBHOOK_URL, json={"alarms": alarms})
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------- Fault Synthesis Engine
@@ -580,6 +584,7 @@ class FaultInjectRequest(BaseModel):
     fault_type: str | None = None  # fibre_cut | duct_cut | power_outage | optical_degradation
     target_id: str | None = None   # cable_id, duct_id, or node_id
     cut_ratio: float = 0.55
+    skip_webhook: bool = False
 
 
 @app.get("/emulator/status")
@@ -700,7 +705,6 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "alarm_id": f"ALM-{uuid.uuid4().hex[:8].upper()}",
                 "scenario_id": scen_id,
                 "source_oem": "nokia_nsp",
-                "protocol=":"OpenConfig-gNMI",
                 "protocol": "OpenConfig-gNMI",
                 "layer": "dwdm_optical",
                 "resource_id": "OCH-SODC-AIR",
@@ -964,7 +968,7 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
         "alarm_count": len(new_alarms),
     }
     ACTIVE_ALARMS.extend(new_alarms)
-    asyncio.create_task(_publish_alarms_to_kafka_and_webhook(new_alarms))
+    asyncio.create_task(_publish_alarms_to_kafka_and_webhook(new_alarms, skip_webhook=req.skip_webhook))
     return {"injected": ACTIVE_FAULTS[scen_id], "alarms_emitted": len(new_alarms), "alarms": new_alarms}
 
 

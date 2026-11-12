@@ -1,0 +1,104 @@
+[
+  {
+    "id": "RB-OSP-001",
+    "title": "Metro Trunk Fibre Cut Localization, SRLG Audit & Hitless DWDM Restoration",
+    "domain": "fibre_osp",
+    "oem_tags": ["VIAVI ONMSi", "Lepton GIS", "Ciena MCP", "NMSWorks CygNet"],
+    "symptoms": "OTS_LOS_LINE_FAIL, OCH_LOF_CHANNEL_DOWN, INTERFACE_LINK_BFD_DOWN, OTDR_REFLECTIVE_FIBER_BREAK",
+    "procedure_md": "1. **Verify Optical Break via RFTS:** Pull latest 1625nm `.sor` trace from VIAVI ONMSi / EXFO Nova.\n2. **Convert Optical Distance to Street Coordinates:** Subtract cumulative manhole slack coils (`slack_coil_m` in Lepton GIS) and divide by cable helical stranding factor (`helix_factor`) before walking PostGIS duct geometry.\n3. **Audit Shared-Risk Link Groups (SRLG):** Check if any impacted 1+1 wavelength or dual-homed L3VPN has its backup leg traversing the same cut duct, chamber, or bridge.\n4. **Execute Hitless DWDM Restoration (Gated):** For dual-affected wavelengths, compute a disjoint optical POP path and push restoration via Ciena MCP / Nokia NSP REST API.\n5. **Dispatch OSP Splice Crew:** Open ServiceNow Field Work Order (`wm_order`) with exact upstream/downstream manhole brackets and WGS84 GPS coordinates, and log master incident in Jira (`NOC`).",
+    "past_tickets_json": [
+      {
+        "ticket_id": "INC0084119",
+        "date": "2026-08-14",
+        "summary": "Metro highway civil works cut 144F trunk; initial crew sent 240m off due to unsubtracted manhole slack coils. Always apply slack correction from OSP GIS.",
+        "mttr_hours": 3.2
+      },
+      {
+        "ticket_id": "INC0087902",
+        "date": "2026-09-29",
+        "summary": "100G DCI wavelength lost both working & protect legs on shared span; restored in 4 mins via controller hitless reroute after engineer approval.",
+        "mttr_hours": 0.4
+      }
+    ]
+  },
+  {
+    "id": "RB-GPON-002",
+    "title": "GPON / Enterprise Mass Outage Triage: 'Dying Gasp' Power Loss vs. Feeder Fibre Cut",
+    "domain": "gpon_access",
+    "oem_tags": ["NMSWorks CygNet", "GenieACS", "VIAVI ONMSi"],
+    "symptoms": "GPON_MASS_ONT_DYING_GASP, CPE_POWER_DOWN_DYING_GASP, OTDR_CONTINUITY_VERIFIED_NO_CUT",
+    "procedure_md": "1. **Check OLT Dying-Gasp Ratio:** If >= 80% of offline ONTs/CPEs on a splitter or access cable emitted G.984 PLOAM `dying-gasp` or 802.3ah power-fail frames within a 1-second window, suspect commercial AC power failure.\n2. **Corroborate with On-Demand OTDR:** Trigger VIAVI ONMSi / EXFO 1625nm out-of-band trace on the feeder cable. If end-to-end continuity is intact with normal insertion loss, **DO NOT dispatch an OSP fibre crew**.\n3. **Action:** Log power-outage advisory ticket in Jira/ServiceNow and notify customer/utility facility contact.",
+    "past_tickets_json": [
+      {
+        "ticket_id": "INC0085310",
+        "date": "2026-07-22",
+        "summary": "Utility substation trip caused 24 ONTs to drop with dying-gasp; avoided emergency fibre contractor callout by verifying OTDR continuity first.",
+        "mttr_hours": 1.1
+      }
+    ]
+  },
+  {
+    "id": "RB-OPT-003",
+    "title": "Proactive DWDM Pre-FEC BER & OSNR Degradation Remediation",
+    "domain": "dwdm_optical",
+    "oem_tags": ["Nokia NSP", "Ciena MCP", "EXFO Nova"],
+    "symptoms": "OPTICAL_PRE_FEC_BER_TCA_BREACH, OTDR_NON_REFLECTIVE_HIGH_SPLICE_LOSS",
+    "procedure_md": "1. **Inspect Pre-FEC BER Slope:** When 15-min Pre-FEC BER crosses `1e-4` while Post-FEC errors are still zero, the wavelength is within ~1 dB of an uncorrectable cliff.\n2. **Locate Non-Reflective Pinch/Macro-Bend:** Correlate with EXFO/VIAVI OTDR non-reflective step loss to identify the specific splice closure where fiber pinch occurred.\n3. **Action:** Proactively shift wavelength to a disjoint optical path during approval window and schedule preventive splice re-seat at the identified manhole chamber.",
+    "past_tickets_json": [
+      {
+        "ticket_id": "INC0088204",
+        "date": "2026-10-04",
+        "summary": "Prevented SLA breach on 100G DCI wave by rerouting on Pre-FEC BER TCA alert 40 minutes before complete span loss.",
+        "mttr_hours": 0.0
+      }
+    ]
+  },
+  {
+    "id": "RB-RAN-004",
+    "title": "5G Hub Site Rectifier AC Mains Loss, Battery LVD Countdown & Generator Dispatch",
+    "domain": "mobile_ran",
+    "oem_tags": ["Ericsson ENM", "VIAVI ONMSi", "ServiceNow FSM"],
+    "symptoms": "RAN_RECTIFIER_AC_MAINS_FAIL_LVD_COUNTDOWN, RAN_ENCLOSURE_HIGH_TEMP_HVAC_OFF, BATTERY_DISCHARGE",
+    "procedure_md": "1. **Verify Backhaul Fibre Integrity:** Confirm via RFTS OTDR that the hub site optical backhaul is intact (ruling out transport fault).\n2. **Calculate LVD Time-to-Dark:** Monitor 3GPP TS 32.435 `Enclosure.DcBusVoltageV` slope against the `43.2V` Low-Voltage Disconnect threshold.\n3. **Protect Daisy-Chained Tail Sites:** Query topology for downstream tail gNodeBs anchored to the hub CSR.\n4. **Dispatch Mobile Diesel Generator:** Issue Priority-1 ServiceNow Field Work Order (`wm_order`) to Mobile Power Response Team before LVD trip.",
+    "past_tickets_json": [
+      {
+        "ticket_id": "INC0089112",
+        "date": "2026-09-11",
+        "summary": "5G hub rectifier breaker trip; mobile generator connected at 43.5V (11 mins before LVD), saving hub and daisy-chained tail 5G sectors from outage.",
+        "mttr_hours": 0.6
+      }
+    ]
+  },
+  {
+    "id": "RB-MW-005",
+    "title": "80 GHz E-Band Microwave Rain-Fade (ACM Downshift) vs. Hardware Transceiver Fault",
+    "domain": "mobile_ran",
+    "oem_tags": ["Nokia NSP", "Nokia Wavence", "NMSWorks CygNet"],
+    "symptoms": "MW_EBAND_RSL_DEEP_FADE_ACM_QPSK, BACKHAUL_QOS_BE_QUEUE_TAIL_DROP, RAIN_ATTENUATION",
+    "procedure_md": "1. **Distinguish Weather Fade from ODU Hardware Fault:** Check local TX output power (`+18.0 dBm` nominal) and correlate RSL drop with convective rain rate (`mm/hr`).\n2. **Verify Adaptive Coding & Modulation (ACM) Lock:** Confirm link held carrier lock by downshifting `1024QAM -> QPSK` and DiffServ EF queue is protecting 5G VoNR & F1-C control plane.\n3. **Suppress Hardware Truck Roll:** Do NOT dispatch tower climbers or swap ODU hardware during active rain squall; hold ticket in auto-clear watch window.",
+    "past_tickets_json": [
+      {
+        "ticket_id": "INC0086405",
+        "date": "2026-08-03",
+        "summary": "80GHz backhaul hop downshifted to QPSK during 40mm/hr rain cell; auto-recovered to 1024QAM in 22 mins with zero hardware fault.",
+        "mttr_hours": 0.3
+      }
+    ]
+  },
+  {
+    "id": "RB-SUBSEA-006",
+    "title": "Subsea Wet-Plant Repeater Shunt Fault, PFE Rebalance & C-OTDR Localization",
+    "domain": "dwdm_optical",
+    "oem_tags": ["Ciena MCP", "Subsea PFE", "NMSWorks CygNet"],
+    "symptoms": "SUBSEA_PFE_SHUNT_FAULT_REPEATER_SPAN, WHOLESALE_DCI_SUBSEA_PROTECTION_ALERT, COTDR_SHUNT",
+    "procedure_md": "1. **Pinpoint Wet-Plant Shunt via PFE Voltage/Current Ratio & C-OTDR:** Combine Cable Landing Station PFE voltage drop with Coherent OTDR trace to isolate the repeater span and seabed depth.\n2. **Reconfigure PFE Polarity:** Switch CLS Power Feed Equipment to single-end constant-current feeding to stabilize optical repeater pump current.\n3. **Reroute Wholesale 100G/400G DCI Waves:** Shift affected subsea wavelengths onto diverse terrestrial/subsea protection paths via Optical Controller API and notify marine depot.",
+    "past_tickets_json": [
+      {
+        "ticket_id": "INC0083019",
+        "date": "2026-06-18",
+        "summary": "Repeater span insulation shunt localized within 400m via C-OTDR; zero customer SLA breach after hitless optical controller wavelength switch.",
+        "mttr_hours": 0.5
+      }
+    ]
+  }
+]

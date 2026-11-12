@@ -293,11 +293,11 @@ export const OspMap: React.FC<OspMapProps> = ({
       markersRef.current = [];
 
       const nodesObj = topology?.nodes || {};
-      const impactedCustomerIds = new Set(
-        (activeIncident?.impact?.impacted_services || []).map((s: any) => s.customer_id)
+      const impactedCustomerIds = new Set<string>(
+        (activeIncident?.impact?.impacted_services || []).map((s: any) => String(s.customer_id || ''))
       );
-      const impactedRanIds = new Set(
-        (activeIncident?.impact?.impacted_ran_sites || []).map((r: any) => r.site_id)
+      const impactedRanIds = new Set<string>(
+        (activeIncident?.impact?.impacted_ran_sites || []).map((r: any) => String(r.site_id || ''))
       );
 
       // Manhole markers

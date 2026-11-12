@@ -1,0 +1,77 @@
+name: CI — Anti-Hardcoding, PostGIS Integration & Frontend Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-platform:
+    name: Backend Pytest (PostGIS + pgvector) & Frontend TypeScript Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start PostgreSQL 16 (PostGIS + pgvector) & Redpanda containers
+        run: |
+          docker compose up -d
+          for i in $(seq 1 30); do
+            if docker compose exec -T db pg_isready -U noc -d noc >/dev/null 2>&1; then
+              echo "PostgreSQL + PostGIS + pgvector ready!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Gate 1 — Enforce Zero Hardcoded Topology IDs in backend/app/
+        run: python scripts/check_no_hardcoded_topology.py
+
+      - name: Start Multi-OEM Reference Emulator (:8001) & NOC Copilot Backend (:8002)
+        run: |
+          PYTHONPATH=$(pwd) uvicorn emulators.emu.server:app --host 127.0.0.1 --port 8001 > /tmp/emulator.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8001/emulator/status >/dev/null; then break; fi
+            sleep 1
+          done
+          PYTHONPATH=$(pwd) uvicorn backend.app.main:app --host 127.0.0.1 --port 8002 > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8002/api/v1/overview >/dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Gate 2 — Run End-to-End Pytest Suite (Binary .sor, PostGIS, Graph Clustering, Dijkstra & 10k Storm)
+        run: pytest -v
+
+      - name: Print server logs on failure
+        if: failure()
+        run: |
+          echo "=== EMULATOR LOG ==="
+          tail -n 80 /tmp/emulator.log || true
+          echo "=== BACKEND LOG ==="
+          tail -n 120 /tmp/backend.log || true
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Gate 3 — Frontend Strict TypeScript Check (tsc --noEmit) & Vite Build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
