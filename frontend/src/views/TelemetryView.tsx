@@ -1,5 +1,5 @@
 import React from 'react';
-import { BatteryCharging, CloudRain, FileCode2, Waves } from 'lucide-react';
+import { BatteryCharging, CloudRain, FileCode2, Waves } from '../components/icons';
 import type { FaultScenario, RanSitePm, SubseaSystem } from '../types/api';
 
 interface TelemetryViewProps {

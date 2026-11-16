@@ -253,7 +253,10 @@ def compute_dynamic_optical_reroute(
         return None
 
 
-def build_multilayer_dependency_graph(inv: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_multilayer_dependency_graph(
+    inv: dict[str, Any] | None = None,
+    active_alarms: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Dynamically construct the visual 6-layer dependency DAG from normalized PostgreSQL tables."""
     inv = inv or load_normalized_inventory()
     cables = inv["cables"]
@@ -261,10 +264,11 @@ def build_multilayer_dependency_graph(inv: dict[str, Any] | None = None) -> dict
     oms_by_pair = inv["oms_by_pair"]
     customers = inv["customers"]
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT resource_id, severity, extra_json FROM alarms")
-            active_alarms = [dict(r) for r in cur.fetchall()]
+    if active_alarms is None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT resource_id, severity, extra_json FROM alarms")
+                active_alarms = [dict(r) for r in cur.fetchall()]
 
     faulted_resources = {
         a["resource_id"]

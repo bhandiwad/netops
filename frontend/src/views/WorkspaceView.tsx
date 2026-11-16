@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -11,10 +11,13 @@ import {
   RotateCcw,
   ShieldCheck,
   Terminal,
-} from 'lucide-react';
+} from '../components/icons';
 import { MultiLayerGraph } from '../components/MultiLayerGraph';
-import { OspMap } from '../components/OspMap';
 import { OtdrTracePanel } from '../components/OtdrTracePanel';
+
+const LazyOspMap = lazy(() =>
+  import('../components/OspMap').then((m) => ({ default: m.OspMap }))
+);
 import type {
   FaultLocation,
   FaultScenario,
@@ -248,20 +251,28 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             {stageTab === 'map' && (
               <div className="space-y-3">
                 <div className="h-[540px] w-full">
-                  <OspMap
-                    regionId={overview.active_region}
-                    mapCenter={overview.map_center}
-                    mapZoom={overview.map_zoom}
-                    gis={overview.gis || { ducts: [], manholes: [], cables: [] }}
-                    topology={overview.topology || {}}
-                    activeIncident={activeIncident}
-                    activeProfile={activeProfile}
-                    selectedCableId={selectedCableId}
-                    theme={theme}
-                    onSelectCable={onSelectCable}
-                    onClearCable={onClearCable}
-                    onTriggerCutOnCable={onTriggerCutOnCable}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="w-full h-full rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-900/60 flex items-center justify-center text-xs text-slate-500">
+                        Loading GIS map…
+                      </div>
+                    }
+                  >
+                    <LazyOspMap
+                      regionId={overview.active_region}
+                      mapCenter={overview.map_center}
+                      mapZoom={overview.map_zoom}
+                      gis={overview.gis || { ducts: [], manholes: [], cables: [] }}
+                      topology={overview.topology || {}}
+                      activeIncident={activeIncident}
+                      activeProfile={activeProfile}
+                      selectedCableId={selectedCableId}
+                      theme={theme}
+                      onSelectCable={onSelectCable}
+                      onClearCable={onClearCable}
+                      onTriggerCutOnCable={onTriggerCutOnCable}
+                    />
+                  </Suspense>
                 </div>
 
                 {/* Compact 1-line OTDR summary strip when a cable or fault trace exists */}

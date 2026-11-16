@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import {
   GitBranch,
   Globe,
@@ -9,7 +9,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Sun,
-} from 'lucide-react';
+} from './components/icons';
 import { nocApi } from './api/client';
 import { ConnectorEditorModal, LlmSettingsModal } from './components/ConfigModals';
 import type {
@@ -22,18 +22,36 @@ import type {
   StormBenchmarkResult,
   ThemeMode,
 } from './types/api';
-import { ConnectorsView } from './views/ConnectorsView';
-import { TelemetryView } from './views/TelemetryView';
-import { TopologyView } from './views/TopologyView';
 import { WorkspaceView } from './views/WorkspaceView';
+
+const LazyConnectorsView = lazy(() =>
+  import('./views/ConnectorsView').then((m) => ({ default: m.ConnectorsView }))
+);
+const LazyTelemetryView = lazy(() =>
+  import('./views/TelemetryView').then((m) => ({ default: m.TelemetryView }))
+);
+const LazyTopologyView = lazy(() =>
+  import('./views/TopologyView').then((m) => ({ default: m.TopologyView }))
+);
+
+const OVERVIEW_CACHE_KEY = 'noc_overview_cache_v2';
+
+function loadCachedOverview(): OverviewResponse | null {
+  try {
+    const raw = sessionStorage.getItem(OVERVIEW_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as OverviewResponse) : null;
+  } catch {
+    return null;
+  }
+}
 
 export const App: React.FC = () => {
   const [theme, setTheme] = useState<ThemeMode>(() =>
     localStorage.getItem('noc_theme') === 'dark' ? 'dark' : 'light'
   );
 
-  const [overview, setOverview] = useState<OverviewResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [overview, setOverview] = useState<OverviewResponse | null>(() => loadCachedOverview());
+  const [loading, setLoading] = useState<boolean>(() => loadCachedOverview() === null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const [primaryNav, setPrimaryNav] = useState<PrimaryNavId>('workspace');
@@ -71,6 +89,11 @@ export const App: React.FC = () => {
     try {
       const data = await nocApi.getOverview();
       setOverview(data);
+      try {
+        sessionStorage.setItem(OVERVIEW_CACHE_KEY, JSON.stringify(data));
+      } catch {
+        // Ignore storage quota errors
+      }
       if (data.last_benchmark && !benchmarkResult) {
         setBenchmarkResult(data.last_benchmark);
       }
@@ -444,41 +467,47 @@ export const App: React.FC = () => {
         )}
 
         {primaryNav === 'topology' && (
-          <TopologyView
-            graph={overview.dependency_graph || { nodes: [], edges: [] }}
-            srlgFindings={overview.srlg_findings || []}
-            theme={theme}
-            onInspectCableInWorkspace={(cid) => {
-              handleSelectCable(cid);
-              setPrimaryNav('workspace');
-              setStageTab('otdr');
-            }}
-          />
+          <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Loading topology…</div>}>
+            <LazyTopologyView
+              graph={overview.dependency_graph || { nodes: [], edges: [] }}
+              srlgFindings={overview.srlg_findings || []}
+              theme={theme}
+              onInspectCableInWorkspace={(cid) => {
+                handleSelectCable(cid);
+                setPrimaryNav('workspace');
+                setStageTab('otdr');
+              }}
+            />
+          </Suspense>
         )}
 
         {primaryNav === 'telemetry' && (
-          <TelemetryView
-            ranSitesPm={ranSitesPm}
-            subseaSystems={subseaSystems}
-            scenarios={allScenarios}
-            xmlPreview={xmlPreview}
-            onTriggerScenario={(sid) => handleTriggerScenario(sid)}
-            onToggle3gppXml={handleToggle3gppXml}
-          />
+          <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Loading telemetry…</div>}>
+            <LazyTelemetryView
+              ranSitesPm={ranSitesPm}
+              subseaSystems={subseaSystems}
+              scenarios={allScenarios}
+              xmlPreview={xmlPreview}
+              onTriggerScenario={(sid) => handleTriggerScenario(sid)}
+              onToggle3gppXml={handleToggle3gppXml}
+            />
+          </Suspense>
         )}
 
         {primaryNav === 'connectors' && (
-          <ConnectorsView
-            connectors={overview.connectors || []}
-            benchmarkResult={benchmarkResult}
-            busy={!!busyAction}
-            onRunStormBenchmark={handleRunStormBenchmark}
-            onEditConnector={(c) => {
-              setEditingConnector(c);
-              setEditEndpointUrl(c.endpoint_url);
-              setEditMode(c.mode);
-            }}
-          />
+          <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Loading integrations…</div>}>
+            <LazyConnectorsView
+              connectors={overview.connectors || []}
+              benchmarkResult={benchmarkResult}
+              busy={!!busyAction}
+              onRunStormBenchmark={handleRunStormBenchmark}
+              onEditConnector={(c) => {
+                setEditingConnector(c);
+                setEditEndpointUrl(c.endpoint_url);
+                setEditMode(c.mode);
+              }}
+            />
+          </Suspense>
         )}
       </main>
 

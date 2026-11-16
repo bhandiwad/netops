@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Settings2 } from 'lucide-react';
+import { Play, Settings2 } from '../components/icons';
 import type { Connector, StormBenchmarkResult } from '../types/api';
 
 interface ConnectorsViewProps {

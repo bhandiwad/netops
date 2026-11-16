@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import { Crosshair, X } from 'lucide-react';
+import { Crosshair, X } from './icons';
 
 interface OspMapProps {
   regionId?: string;

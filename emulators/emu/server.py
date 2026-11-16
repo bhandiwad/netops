@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import socket
 import sys
 import time
@@ -31,6 +32,7 @@ import httpx
 from aiokafka import AIOKafkaProducer
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -64,6 +66,7 @@ from .spec import (  # noqa: E402
 )
 
 app = FastAPI(title="Multi-OEM Telco Emulator Suite", version="2.0.0")
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -263,21 +266,30 @@ async def _publish_alarms_to_kafka_and_webhook(
     alarms: list[dict[str, Any]],
     skip_webhook: bool = False,
 ) -> None:
-    # 1. Publish to Redpanda / Kafka
-    try:
-        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP, request_timeout_ms=3000)
-        await producer.start()
+    # 1. Publish to Redpanda / Kafka when explicitly enabled via NOC_ENABLE_KAFKA=1
+    if os.getenv("NOC_ENABLE_KAFKA", "0") == "1":
         try:
-            for a in alarms:
-                await producer.send_and_wait(
-                    KAFKA_TOPIC,
-                    json.dumps(a).encode("utf-8"),
-                    key=a["alarm_id"].encode("utf-8"),
-                )
-        finally:
-            await producer.stop()
-    except Exception:
-        pass
+            host, port_str = KAFKA_BOOTSTRAP.split(":")
+            _, writer = await asyncio.wait_for(asyncio.open_connection(host, int(port_str)), timeout=0.25)
+            writer.close()
+            await writer.wait_closed()
+            producer = AIOKafkaProducer(
+                bootstrap_servers=KAFKA_BOOTSTRAP,
+                request_timeout_ms=1000,
+                metadata_max_age_ms=30000,
+            )
+            await asyncio.wait_for(producer.start(), timeout=1.0)
+            try:
+                for a in alarms:
+                    await producer.send_and_wait(
+                        KAFKA_TOPIC,
+                        json.dumps(a).encode("utf-8"),
+                        key=a["alarm_id"].encode("utf-8"),
+                    )
+            finally:
+                await producer.stop()
+        except Exception:
+            pass
 
     # 2. Push TMF642 AlarmCreateEvent webhook to Copilot backend when invoked externally
     if not skip_webhook:

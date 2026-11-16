@@ -14,6 +14,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import time
 from typing import Any, Iterator
 
 import psycopg2
@@ -28,16 +29,22 @@ RUNBOOKS_FILE = Path(__file__).resolve().parent / "knowledge" / "runbooks.json"
 
 _DB_POOL: psycopg2.pool.ThreadedConnectionPool | None = None
 
+_CONNECT_KWARGS: dict[str, Any] = {
+    "dsn": DB_DSN,
+    "cursor_factory": psycopg2.extras.RealDictCursor,
+    "connect_timeout": 20,
+    "keepalives": 1,
+    "keepalives_idle": 10,
+    "keepalives_interval": 3,
+    "keepalives_count": 3,
+    "options": "-c statement_timeout=15000",
+}
+
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     global _DB_POOL
     if _DB_POOL is None or _DB_POOL.closed:
-        _DB_POOL = psycopg2.pool.ThreadedConnectionPool(
-            minconn=1,
-            maxconn=20,
-            dsn=DB_DSN,
-            cursor_factory=psycopg2.extras.RealDictCursor,
-        )
+        _DB_POOL = psycopg2.pool.ThreadedConnectionPool(2, 20, **_CONNECT_KWARGS)
     return _DB_POOL
 
 
@@ -47,16 +54,26 @@ def get_conn() -> Iterator[Any]:
     conn = pool.getconn()
     if conn.closed:
         pool.putconn(conn, close=True)
-        conn = psycopg2.connect(DB_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
+        conn = psycopg2.connect(**_CONNECT_KWARGS)
         pooled = False
     else:
         pooled = True
     try:
         yield conn
         conn.commit()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        if pooled:
+            pool.putconn(conn, close=True)
+            pooled = False
+        elif not conn.closed:
+            conn.close()
+        raise
     except Exception:
         if not conn.closed:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         raise
     finally:
         if pooled:

@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Activity, Download, Upload, AlertOctagon } from 'lucide-react';
+import { Activity, Download, Upload, AlertOctagon } from './icons';
 
 interface OtdrTracePanelProps {
   trace: any | null;

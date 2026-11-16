@@ -57,6 +57,17 @@ def _interpolate_along_coords(coords_lon_lat: list[list[float]], fraction: float
     return coords_lon_lat[-1][0], coords_lon_lat[-1][1]
 
 
+def _downsample_coords(coords: list[list[float]], max_pts: int = 56) -> list[list[float]]:
+    """Keep crisp street geometry while bounding JSON payload size for fast UI map loads."""
+    n = len(coords)
+    if n <= max_pts or max_pts < 2:
+        return coords
+    step = (n - 1) / float(max_pts - 1)
+    out = [coords[round(i * step)] for i in range(max_pts - 1)]
+    out.append(coords[-1])
+    return out
+
+
 def _fallback_road_curve(lon_a: float, lat_a: float, lon_b: float, lat_b: float, steps: int = 16) -> list[list[float]]:
     """Deterministic multi-vertex road-like polyline if OSRM is unreachable."""
     pts: list[list[float]] = []
@@ -132,6 +143,7 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
                 coords = _fallback_road_curve(lon_a, lat_a, lon_b, lat_b)
 
             trench_len_m = round(_geodesic_length_m(coords), 1)
+            coords = _downsample_coords(coords, max_pts=56)
             duct_rec = {
                 "id": d["id"],
                 "node_a": d["a"],

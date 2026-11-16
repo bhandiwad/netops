@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -48,6 +49,7 @@ from .schemas import (
 from .spatial import locate_fault_on_cable_postgis
 
 app = FastAPI(title="Telco Network Operations Copilot API", version="2.1.0")
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,22 +59,36 @@ app.add_middleware(
 
 RECENT_WIRE_PACKETS: list[dict[str, Any]] = []
 LAST_BENCHMARK_RESULT: dict[str, Any] | None = None
+_OVERVIEW_CACHE: dict[str, Any] | None = None
 KAFKA_BOOTSTRAP = os.getenv("NOC_KAFKA_BOOTSTRAP", "127.0.0.1:19092")
 KAFKA_TOPIC = os.getenv("NOC_KAFKA_TOPIC", "noc.alarms.raw")
 
 
+def invalidate_overview_cache() -> None:
+    global _OVERVIEW_CACHE
+    _OVERVIEW_CACHE = None
+
+
 async def _kafka_consumer_worker() -> None:
     """Active background Kafka consumer reading from Redpanda topic `noc.alarms.raw`."""
-    try:
-        from aiokafka import AIOKafkaConsumer
-        consumer = AIOKafkaConsumer(
-            KAFKA_TOPIC,
-            bootstrap_servers=KAFKA_BOOTSTRAP,
-            group_id="noc-copilot-correlator",
-            auto_offset_reset="latest",
-        )
-        await consumer.start()
+    while True:
+        consumer = None
         try:
+            host, port_str = KAFKA_BOOTSTRAP.split(":")
+            _, writer = await asyncio.wait_for(asyncio.open_connection(host, int(port_str)), timeout=0.35)
+            writer.close()
+            await writer.wait_closed()
+
+            from aiokafka import AIOKafkaConsumer
+            consumer = AIOKafkaConsumer(
+                KAFKA_TOPIC,
+                bootstrap_servers=KAFKA_BOOTSTRAP,
+                group_id="noc-copilot-correlator",
+                auto_offset_reset="latest",
+                request_timeout_ms=2500,
+                retry_backoff_ms=2000,
+            )
+            await asyncio.wait_for(consumer.start(), timeout=2.5)
             async for msg in consumer:
                 val_str = msg.value.decode("utf-8", errors="replace") if msg.value else "{}"
                 RECENT_WIRE_PACKETS.append({
@@ -83,10 +99,16 @@ async def _kafka_consumer_worker() -> None:
                 })
                 if len(RECENT_WIRE_PACKETS) > 100:
                     RECENT_WIRE_PACKETS.pop(0)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(15.0)
         finally:
-            await consumer.stop()
-    except Exception:
-        pass
+            if consumer is not None:
+                try:
+                    await consumer.stop()
+                except Exception:
+                    pass
 
 
 class _SyslogUdpProtocol(asyncio.DatagramProtocol):
@@ -115,6 +137,20 @@ class _SnmpTrapUdpProtocol(asyncio.DatagramProtocol):
             RECENT_WIRE_PACKETS.pop(0)
 
 
+async def _db_pool_keepalive_worker() -> None:
+    """Keep pooled PostgreSQL sockets warm across Docker Desktop gVisor NAT idle windows."""
+    while True:
+        await asyncio.sleep(15.0)
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     init_db()
@@ -127,9 +163,12 @@ async def _startup() -> None:
         await loop.create_datagram_endpoint(_SnmpTrapUdpProtocol, local_addr=("127.0.0.1", 15162))
     except Exception:
         pass
-    asyncio.create_task(_kafka_consumer_worker())
+    asyncio.create_task(_db_pool_keepalive_worker())
+    if os.getenv("NOC_ENABLE_KAFKA", "0") == "1":
+        asyncio.create_task(_kafka_consumer_worker())
     try:
         await sync_all_connectors()
+        await get_overview()
     except Exception:
         pass
 
@@ -163,6 +202,19 @@ async def backend_landing_page() -> str:
 
 @app.get("/api/v1/overview")
 async def get_overview() -> dict[str, Any]:
+    global _OVERVIEW_CACHE
+    if _OVERVIEW_CACHE is not None:
+        return {
+            **_OVERVIEW_CACHE,
+            "last_benchmark": LAST_BENCHMARK_RESULT,
+            "wire_packets": list(reversed(RECENT_WIRE_PACKETS[-25:])),
+            "llm_config": {
+                "provider": LLM_CONFIG["provider"],
+                "model": LLM_CONFIG["model"],
+                "api_key_configured": bool(LLM_CONFIG.get("api_key")),
+            },
+        }
+
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM connectors ORDER BY id")
@@ -181,18 +233,91 @@ async def get_overview() -> dict[str, Any]:
             cables = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT key, payload FROM topology_state")
             tstates = {r["key"]: r["payload"] for r in cur.fetchall()}
-            cur.execute("SELECT incident_id FROM incidents ORDER BY updated_at DESC")
-            inc_ids = [r["incident_id"] for r in cur.fetchall()]
-            cur.execute("SELECT * FROM alarms ORDER BY raised_at DESC LIMIT 120")
+            cur.execute("SELECT * FROM incidents ORDER BY updated_at DESC")
+            inc_rows = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT * FROM alarms ORDER BY raised_at DESC LIMIT 200")
             alarms = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT id, title, domain, oem_tags, symptoms, procedure_md, past_tickets_json FROM runbooks ORDER BY id")
             runbooks = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 40")
             audits = [dict(r) for r in cur.fetchall()]
 
-    incidents = [get_incident_detail(iid) for iid in inc_ids]
-    srlg_findings = audit_all_srlg_diversity()
-    dep_graph = build_multilayer_dependency_graph()
+            # Normalized inventory tables in the SAME single checkout (zero extra pool round-trips!)
+            cur.execute("SELECT * FROM network_nodes")
+            net_nodes = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM oms_links")
+            oms_links = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT * FROM optical_channels")
+            wavelengths = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM ip_links")
+            ip_links = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT * FROM ran_sites")
+            ran_sites = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM gpon_clusters")
+            gpon_clusters = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM subsea_cables")
+            subsea_cables = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM sla_tiers")
+            sla_tiers = {r["tier_name"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM customers")
+            customers = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT * FROM customer_services")
+            services = [dict(r) for r in cur.fetchall()]
+
+    oms_by_pair: dict[tuple[str, str], str] = {}
+    for oms in oms_links:
+        oms_by_pair[(oms["node_a"], oms["node_b"])] = oms["cable_id"]
+        oms_by_pair[(oms["node_b"], oms["node_a"])] = oms["cable_id"]
+
+    inv = {
+        "nodes": net_nodes,
+        "ducts": {d["id"]: d for d in ducts},
+        "cables": {c["id"]: c for c in cables},
+        "oms_links": oms_links,
+        "oms_by_pair": oms_by_pair,
+        "wavelengths": wavelengths,
+        "ip_links": ip_links,
+        "ran_sites": ran_sites,
+        "gpon_clusters": gpon_clusters,
+        "subsea_cables": subsea_cables,
+        "sla_tiers": sla_tiers,
+        "customers": customers,
+        "services": services,
+    }
+
+    alarms_by_inc: dict[str, list[dict[str, Any]]] = {}
+    for alm in alarms:
+        iid = alm.get("incident_id")
+        if iid:
+            alarms_by_inc.setdefault(iid, []).append(alm)
+
+    incidents = [
+        {
+            "incident_id": inc["incident_id"],
+            "title": inc["title"],
+            "status": inc["status"],
+            "severity": inc["severity"],
+            "root_cause_type": inc["root_cause_type"],
+            "root_cause_resource": inc["root_cause_resource"],
+            "root_cause_summary": inc["root_cause_summary"],
+            "confidence": inc["confidence"],
+            "alarm_count": inc["alarm_count"],
+            "fault_location": inc["fault_location_json"],
+            "impact": inc["impact_json"],
+            "srlg_findings": inc["srlg_findings_json"],
+            "otdr_trace": inc["otdr_trace_json"],
+            "ai_copilot": inc["ai_copilot_json"],
+            "proposed_actions": inc["proposed_actions_json"],
+            "executed_actions": inc["executed_actions_json"],
+            "alarms": alarms_by_inc.get(inc["incident_id"], []),
+            "created_at": inc["created_at"].isoformat() if inc.get("created_at") else None,
+            "updated_at": inc["updated_at"].isoformat() if inc.get("updated_at") else None,
+        }
+        for inc in inc_rows
+    ]
+
+    srlg_findings = audit_all_srlg_diversity(inv)
+    dep_graph = build_multilayer_dependency_graph(inv, active_alarms=alarms)
 
     cmap = {c["id"]: c for c in connectors}
     emu_base = get_emulator_control_base_url()
@@ -202,21 +327,32 @@ async def get_overview() -> dict[str, Any]:
     snow_work_orders: list[dict[str, Any]] = []
 
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            r_emu = await client.get(f"{emu_base}/emulator/status")
-            if r_emu.status_code == 200:
-                emu_status = r_emu.json()
-            if "jira_sm" in cmap:
-                r_jira = await client.get(cmap["jira_sm"]["endpoint_url"].rstrip("/") + "/rest/api/3/issue")
-                if r_jira.status_code == 200:
-                    jira_issues = r_jira.json().get("issues", [])
-            if "servicenow_itsm" in cmap:
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            tasks: list[Any] = [client.get(f"{emu_base}/emulator/status")]
+            has_jira = "jira_sm" in cmap
+            has_snow = "servicenow_itsm" in cmap
+            if has_jira:
+                tasks.append(client.get(cmap["jira_sm"]["endpoint_url"].rstrip("/") + "/rest/api/3/issue"))
+            if has_snow:
                 snow_base = cmap["servicenow_itsm"]["endpoint_url"].rstrip("/")
-                r_sinc = await client.get(f"{snow_base}/api/now/table/incident")
-                if r_sinc.status_code == 200:
+                tasks.append(client.get(f"{snow_base}/api/now/table/incident"))
+                tasks.append(client.get(f"{snow_base}/api/now/table/wm_order"))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            idx = 0
+            r_emu = results[idx]; idx += 1
+            if not isinstance(r_emu, Exception) and r_emu.status_code == 200:
+                emu_status = r_emu.json()
+            if has_jira:
+                r_jira = results[idx]; idx += 1
+                if not isinstance(r_jira, Exception) and r_jira.status_code == 200:
+                    jira_issues = r_jira.json().get("issues", [])
+            if has_snow:
+                r_sinc = results[idx]; idx += 1
+                r_swo = results[idx]; idx += 1
+                if not isinstance(r_sinc, Exception) and r_sinc.status_code == 200:
                     snow_incidents = r_sinc.json().get("result", [])
-                r_swo = await client.get(f"{snow_base}/api/now/table/wm_order")
-                if r_swo.status_code == 200:
+                if not isinstance(r_swo, Exception) and r_swo.status_code == 200:
                     snow_work_orders = r_swo.json().get("result", [])
     except Exception:
         pass
@@ -228,7 +364,7 @@ async def get_overview() -> dict[str, Any]:
         or "AED"
     )
 
-    return {
+    payload = {
         "active_region": emu_status.get("active_region", "uae_dubai"),
         "region_name": emu_status.get("region_name", "UAE — Dubai Metro"),
         "currency": active_currency,
@@ -267,6 +403,8 @@ async def get_overview() -> dict[str, Any]:
             "api_key_configured": bool(LLM_CONFIG.get("api_key")),
         },
     }
+    _OVERVIEW_CACHE = payload
+    return payload
 
 
 class Tmf642AlarmBatch(BaseModel):
@@ -276,6 +414,7 @@ class Tmf642AlarmBatch(BaseModel):
 @app.post("/api/v1/ingest/tmf642")
 async def ingest_tmf642(batch: Tmf642AlarmBatch) -> dict[str, Any]:
     incidents = await correlate_alarms_into_incidents(batch.alarms)
+    invalidate_overview_cache()
     return {
         "status": "correlated",
         "incident_id": incidents[0]["incident_id"] if incidents else None,
@@ -297,7 +436,8 @@ async def trigger_fault(req: TriggerFaultPayload) -> dict[str, Any]:
 
     alarms = data.get("alarms", [])
     incidents = await correlate_alarms_into_incidents(alarms)
-    await sync_all_connectors()
+    await sync_all_connectors(include_static_topology=False)
+    invalidate_overview_cache()
     return {
         "incident": incidents[0] if incidents else None,
         "incidents": incidents,
@@ -351,6 +491,7 @@ async def switch_region(req: RegionSwitchPayload) -> dict[str, Any]:
     LAST_BENCHMARK_RESULT = None
     await sync_all_connectors()
     log_audit("noc_operator", "REGION_SWITCHED", req.region_id, sw_data)
+    invalidate_overview_cache()
     return sw_data
 
 
@@ -364,8 +505,9 @@ async def reset_faults() -> dict[str, Any]:
             cur.execute("DELETE FROM alarms")
             cur.execute("DELETE FROM incidents")
     RECENT_WIRE_PACKETS.clear()
-    await sync_all_connectors()
+    await sync_all_connectors(include_static_topology=False)
     log_audit("noc_operator", "NETWORK_RESET", "ALL", {"status": "cleared"})
+    invalidate_overview_cache()
     return {"status": "reset"}
 
 
@@ -377,7 +519,8 @@ class ApproveActionsRequest(BaseModel):
 @app.post("/api/v1/incidents/{incident_id}/approve")
 async def approve_incident_actions(incident_id: str, req: ApproveActionsRequest) -> dict[str, Any]:
     updated = await execute_incident_actions(incident_id, req.approved_by, req.action_ids)
-    await sync_all_connectors()
+    await sync_all_connectors(include_static_topology=False)
+    invalidate_overview_cache()
     return {"incident": updated}
 
 
@@ -402,12 +545,15 @@ async def regenerate_incident_ai(incident_id: str) -> dict[str, Any]:
                 "UPDATE incidents SET ai_copilot_json = %s, updated_at = NOW() WHERE incident_id = %s",
                 (json.dumps(ai_res), incident_id),
             )
+    invalidate_overview_cache()
     return {"ai_copilot": ai_res}
 
 
 @app.post("/api/v1/connectors/sync")
 async def trigger_connector_sync() -> dict[str, Any]:
-    return await sync_all_connectors()
+    res = await sync_all_connectors()
+    invalidate_overview_cache()
+    return res
 
 
 @app.put("/api/v1/connectors/{connector_id}")
@@ -428,6 +574,7 @@ async def update_connector(connector_id: str, req: ConnectorUpdatePayload) -> di
                 raise HTTPException(status_code=404, detail="Connector not found")
     log_audit("noc_admin", "UPDATE_CONNECTOR", connector_id, req.model_dump())
     await sync_all_connectors()
+    invalidate_overview_cache()
     return dict(row)
 
 

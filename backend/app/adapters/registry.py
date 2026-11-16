@@ -35,14 +35,14 @@ def _save_state_snapshot(cur: Any, key: str, payload: Any, connector_id: str, la
     )
 
 
-async def sync_all_connectors() -> dict[str, Any]:
+async def sync_all_connectors(include_static_topology: bool = True) -> dict[str, Any]:
     """Pull inventory, GIS geometry, optical/RAN PM state, and BSS SLA data into normalized PostgreSQL tables."""
     cmap = get_connectors_map(only_enabled=True)
     summary: dict[str, Any] = {"synced": [], "errors": []}
 
-    async with httpx.AsyncClient(timeout=6.0) as client:
+    async with httpx.AsyncClient(timeout=4.0) as client:
         # 1. Lepton GIS WFS -> osp_ducts, osp_manholes, osp_cables (PostGIS)
-        if "lepton_gis" in cmap:
+        if include_static_topology and "lepton_gis" in cmap:
             c = cmap["lepton_gis"]
             t0 = time.perf_counter()
             try:
@@ -151,7 +151,7 @@ async def sync_all_connectors() -> dict[str, Any]:
                 summary["errors"].append({"id": "lepton_gis", "error": str(e)})
 
         # 2. NMSWorks CygNet Unified Topology -> network_nodes, oms_links, optical_channels, ip_links, ran_sites, gpon_clusters
-        if "nmsworks_cygnet" in cmap:
+        if include_static_topology and "nmsworks_cygnet" in cmap:
             c = cmap["nmsworks_cygnet"]
             t0 = time.perf_counter()
             try:
@@ -347,7 +347,7 @@ async def sync_all_connectors() -> dict[str, Any]:
                 summary["errors"].append({"id": cid, "error": str(e)})
 
         # 4. Comviva BSS -> sla_tiers, customers, customer_services
-        if "comviva_bss" in cmap:
+        if include_static_topology and "comviva_bss" in cmap:
             t0 = time.perf_counter()
             try:
                 r = await client.get(cmap["comviva_bss"]["endpoint_url"].rstrip("/") + "/customerManagement/v4/customer")
@@ -408,7 +408,7 @@ async def sync_all_connectors() -> dict[str, Any]:
 
         # 5. VIAVI ONMSi & EXFO Nova RFTS Inventory -> rfts_units (zero hardcoded cable names!)
         exfo_sample_cable: str | None = None
-        if "viavi_onmsi" in cmap:
+        if include_static_topology and "viavi_onmsi" in cmap:
             t0 = time.perf_counter()
             try:
                 r = await client.get(cmap["viavi_onmsi"]["endpoint_url"].rstrip("/") + "/rtus")
