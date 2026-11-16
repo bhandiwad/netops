@@ -165,6 +165,7 @@ export interface ImpactedService {
 }
 
 export interface IncidentImpact {
+  currency?: string;
   impacted_service_count: number;
   complete_outage_count: number;
   total_sla_penalty_per_hour_aed: number;
@@ -338,7 +339,20 @@ export interface FaultScenario {
   fault_type: string;
 }
 
+export interface RegionOption {
+  region_id: string;
+  label: string;
+  short_label: string;
+  currency: string;
+}
+
 export interface OverviewResponse {
+  active_region?: string;
+  region_name?: string;
+  currency?: string;
+  map_center?: [number, number];
+  map_zoom?: number;
+  available_regions?: RegionOption[];
   connectors: Connector[];
   gis: OspGisBundle;
   topology: Record<string, unknown>;

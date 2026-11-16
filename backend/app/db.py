@@ -18,6 +18,7 @@ from typing import Any, Iterator
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
 from .adapters.embeddings import EMBEDDING_DIM, compute_text_embedding
 
@@ -25,18 +26,43 @@ DB_DSN = os.getenv("NOC_DB_DSN", "postgresql://noc:noc@127.0.0.1:5433/noc")
 DEFAULT_EMULATOR_BASE = os.getenv("NOC_EMULATOR_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
 RUNBOOKS_FILE = Path(__file__).resolve().parent / "knowledge" / "runbooks.json"
 
+_DB_POOL: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    global _DB_POOL
+    if _DB_POOL is None or _DB_POOL.closed:
+        _DB_POOL = psycopg2.pool.ThreadedConnectionPool(
+            minconn=1,
+            maxconn=20,
+            dsn=DB_DSN,
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+    return _DB_POOL
+
 
 @contextmanager
 def get_conn() -> Iterator[Any]:
-    conn = psycopg2.connect(DB_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
+    pool = _get_pool()
+    conn = pool.getconn()
+    if conn.closed:
+        pool.putconn(conn, close=True)
+        conn = psycopg2.connect(DB_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
+        pooled = False
+    else:
+        pooled = True
     try:
         yield conn
         conn.commit()
     except Exception:
-        conn.rollback()
+        if not conn.closed:
+            conn.rollback()
         raise
     finally:
-        conn.close()
+        if pooled:
+            pool.putconn(conn, close=bool(conn.closed))
+        elif not conn.closed:
+            conn.close()
 
 
 SCHEMA_SQL = f"""

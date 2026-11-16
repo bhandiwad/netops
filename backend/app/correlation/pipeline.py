@@ -121,7 +121,19 @@ def _compute_cluster_impact(
         if not s["diversity_compliant"] and any(isvc["service_id"] == s["service_id"] for isvc in impacted_services)
     ]
 
+    currency = "AED"
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT payload FROM topology_state WHERE key = 'comviva_bss'")
+                row = cur.fetchone()
+                if row and isinstance(row.get("payload"), dict) and row["payload"].get("currency"):
+                    currency = str(row["payload"]["currency"])
+    except Exception:
+        pass
+
     impact_bundle = {
+        "currency": currency,
         "impacted_service_count": len(impacted_services),
         "complete_outage_count": sum(1 for s in impacted_services if s["outage_state"] == "COMPLETE_OUTAGE"),
         "total_sla_penalty_per_hour_aed": total_penalty_per_hour_aed,
@@ -235,6 +247,7 @@ async def generate_ai_copilot_analysis(
         else "All redundant paths remained physically disjoint."
     )
 
+    currency = str(impact_bundle.get("currency") or "AED")
     deterministic_mop = (
         f"### Executive Diagnosis (Grounded in {len(alarms)} Multi-Layer Telemetry Events)\n"
         f"- **Root Cause:** `{root_cause_type}` on **{root_cause_resource}**.\n"
@@ -243,8 +256,8 @@ async def generate_ai_copilot_analysis(
         f"- **Spatial & Optical Physics:** {root_cause_summary}\n"
         f"- **SRLG & Redundancy Audit:** {srlg_text}\n"
         f"- **Commercial SLA Exposure:** **{impact_bundle['impacted_service_count']} enterprise services** affected "
-        f"(**AED {impact_bundle['total_sla_penalty_per_hour_aed']:,}/hr** penalty risk; "
-        f"**AED {impact_bundle['four_hour_sla_exposure_aed']:,}** over 4-hour Platinum MTTR window).\n\n"
+        f"(**{currency} {impact_bundle['total_sla_penalty_per_hour_aed']:,}/hr** penalty risk; "
+        f"**{currency} {impact_bundle['four_hour_sla_exposure_aed']:,}** over 4-hour Platinum MTTR window).\n\n"
         f"### Recommended Method of Procedure (Ref: `{matched_rb['id']}` — *{matched_rb['title']}*)\n"
         f"{matched_rb['procedure_md']}"
     )

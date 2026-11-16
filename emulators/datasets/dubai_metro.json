@@ -1,12 +1,18 @@
 {
-  "dataset_id": "dubai_metro_v2",
-  "dataset_name": "UAE Metro, 5G, Subsea & DCI Reference Digital Twin",
+  "dataset_id": "uae_dubai",
+  "dataset_name": "UAE \u2014 Dubai Metro",
+  "currency": "AED",
+  "map_center": [
+    55.245,
+    25.155
+  ],
+  "map_zoom": 10.9,
   "operator_profiles": {
-    "du_converged": {
-      "id": "du_converged",
-      "name": "Converged Mobile, 5G & Enterprise Operator (UAE \u2014 du / e& archetype)",
+    "uae_converged": {
+      "id": "uae_converged",
+      "name": "Converged 4G/5G, Metro Fibre & Enterprise Operator (UAE)",
       "short_name": "Converged 4G/5G + Fibre + Enterprise",
-      "region": "Dubai / UAE Metro",
+      "region": "UAE \u2014 Dubai Metro",
       "currency": "AED",
       "active_packs": [
         "fibre_osp",
@@ -27,64 +33,13 @@
         "jira_sm",
         "servicenow_itsm"
       ],
-      "description": "Full converged network: Ciena 6500 & Nokia 1830 DWDM rings, Cisco/Juniper/Nokia/Huawei IP/MPLS core, Ericsson/Nokia 4G/5G hub-and-tail cell sites with microwave & fibre backhaul, GPON FTTH/enterprise access, Lepton OSP GIS, VIAVI ONMSi OTDR, NMSWorks OSS, and Comviva BSS."
+      "description": "Full converged national network: Ciena 6500 & Nokia 1830 DWDM rings, Cisco/Juniper IP/MPLS core, Ericsson/Nokia 4G/5G hub-and-tail cell sites, GPON access, Lepton OSP GIS, and VIAVI ONMSi OTDR."
     },
-    "constl_fiber": {
-      "id": "constl_fiber",
-      "name": "Pure-Play Metro Fibre, Wavelength & DCI Operator (Constl archetype)",
-      "short_name": "Metro Fibre / DWDM / DCI (Constl)",
-      "region": "Metro & Data-Centre Corridor",
-      "currency": "AED",
-      "active_packs": [
-        "fibre_osp",
-        "dwdm_optical",
-        "ip_mpls",
-        "enterprise_sla"
-      ],
-      "active_oems": [
-        "ciena_mcp",
-        "nokia_nsp",
-        "nmsworks_cygnet",
-        "lepton_gis",
-        "viavi_onmsi",
-        "exfo_nova",
-        "comviva_bss",
-        "jira_sm",
-        "servicenow_itsm"
-      ],
-      "description": "Neutral dense-fibre and data-centre interconnect operator: 100G/400G Ciena DWDM wavelengths, MEF Ethernet & L3VPN enterprise circuits, SRLG route-diversity SLA enforcement, Lepton GIS duct/slack inventory, VIAVI ONMSi live 1625nm OTDR monitoring, and NMSWorks CygNet OSS."
-    },
-    "vi_india": {
-      "id": "vi_india",
-      "name": "High-Scale Mobile, Metro Fibre & Microwave Operator (Vodafone Idea archetype)",
-      "short_name": "4G/5G RAN + Metro Fibre + Microwave (Vi)",
-      "region": "High-Density Metro",
-      "currency": "AED",
-      "active_packs": [
-        "fibre_osp",
-        "dwdm_optical",
-        "ip_mpls",
-        "mobile_ran",
-        "enterprise_sla"
-      ],
-      "active_oems": [
-        "ciena_mcp",
-        "nokia_nsp",
-        "nmsworks_cygnet",
-        "lepton_gis",
-        "viavi_onmsi",
-        "ericsson_enm",
-        "comviva_bss",
-        "jira_sm",
-        "servicenow_itsm"
-      ],
-      "description": "Multi-vendor 4G/5G RAN (Ericsson/Nokia) with dense metro fibre rings, E-band/18GHz microwave tail backhaul, frequent municipal roadwork fibre cuts, site AC-mains/battery telemetry, and enterprise MPLS/IoT."
-    },
-    "pccw_subsea": {
-      "id": "pccw_subsea",
-      "name": "Global Subsea, Optical DCI & Wholesale Carrier (PCCW Global / HKT archetype)",
-      "short_name": "Subsea + 400G DCI + Wholesale (PCCW)",
-      "region": "Cable Landing & DCI Corridor",
+    "uae_subsea_dci": {
+      "id": "uae_subsea_dci",
+      "name": "Subsea CLS, Optical DCI & Wholesale Carrier (UAE)",
+      "short_name": "Subsea CLS + 400G DCI + Wholesale",
+      "region": "UAE \u2014 Cable Landing & DCI Corridor",
       "currency": "AED",
       "active_packs": [
         "fibre_osp",
@@ -103,7 +58,7 @@
         "jira_sm",
         "servicenow_itsm"
       ],
-      "description": "Subsea cable landing station (Jebel Ali CLS) connected to hyperscale colocation data centres via protected 100G/400G DWDM wavelengths, pre-FEC BER / OSNR optical degradation tracking, and SRLG audits."
+      "description": "Subsea cable landing station (Jebel Ali CLS) connected to hyperscale colocation data centres via protected 100G/400G DWDM wavelengths, Pre-FEC BER / OSNR tracking, and SRLG diversity audits."
     }
   },
   "nodes": {
@@ -1493,10 +1448,8 @@
       "title": "Metro Trunk Fibre Cut + Hidden SRLG Backup Failure (Sheikh Zayed Rd Canal)",
       "category": "Fibre Cut / Multi-Vendor Storm",
       "operators": [
-        "du_converged",
-        "constl_fiber",
-        "vi_india",
-        "pccw_subsea"
+        "uae_converged",
+        "uae_subsea_dci"
       ],
       "summary": "Civil excavation near Dubai Water Canal severs trunk cable CBL-QZ-BB-01 at 62% along QZ->BB. Triggers a 28-alarm storm across Ciena MCP (OMS/OCh LOS), Cisco ASR & Juniper MX (BFD/BGP/ISIS down), VIAVI ONMSi (1625nm OTDR reflective break), NMSWorks CygNet, and Ericsson ENM (hub site gNB-BB-01 + 2 downstream 5G tail sites cascading dark). Exposes a critical SRLG failure: Jebel Ali Logistics Cloud's '1+1 protected' 100G wavelength had BOTH working and protect legs routed through the QZ-BB span.",
       "fault_type": "fibre_cut",
@@ -1508,8 +1461,8 @@
       "title": "Dual-Homed Bank HQ Outage via Shared Manhole Chamber (DIFC Gate SRLG Violation)",
       "category": "Enterprise SLA / False Diversity",
       "operators": [
-        "constl_fiber",
-        "du_converged"
+        "uae_subsea_dci",
+        "uae_converged"
       ],
       "summary": "Third-party contractor damages duct D-DG-EGB outside DIFC Gate Chamber (J_DG). Emirates Gulf Bank HQ purchased a Platinum 'Dual-POP Diverse 10G L3VPN' (primary to DIFC POP, secondary to Business Bay POP), but Lepton GIS geometry reveals both cables CBL-DIFC-EGB-01 and CBL-BB-EGB-01 enter the same last-mile chamber J_DG\u2014taking down both legs simultaneously.",
       "fault_type": "duct_cut",
@@ -1521,9 +1474,8 @@
       "title": "Premises Power Blackout ('Dying Gasp') vs. Fibre Cut Disambiguation (Al Quoz)",
       "category": "GPON / Smart-Grid Triage",
       "operators": [
-        "vi_india",
-        "du_converged",
-        "constl_fiber"
+        "uae_converged",
+        "uae_subsea_dci"
       ],
       "summary": "24 industrial ONTs and smart-grid modems in Al Quoz Industrial Area drop offline within 800ms, followed by gNB-DSO-04 AC mains failure. Instead of dispatching a fibre splicing crew, the copilot correlates TR-069/OLT 'dying-gasp' power-off frames and VIAVI OTDR clean continuity trace on CBL-QZ-AQI-01 to prove a substation power outage\u2014cancelling an unnecessary OSP fibre truck roll.",
       "fault_type": "power_outage",
@@ -1535,9 +1487,8 @@
       "title": "Pre-Failure DWDM Optical OSNR & Pre-FEC BER Degradation (Silicon Oasis AI DC)",
       "category": "Predictive Optical / DCI Assurance",
       "operators": [
-        "pccw_subsea",
-        "constl_fiber",
-        "du_converged"
+        "uae_subsea_dci",
+        "uae_converged"
       ],
       "summary": "Before any hard link down occurs on Oasis Sovereign AI DC's 100G DCI wavelength (OCH-SODC-AIR), Nokia NSP streaming telemetry reports Pre-FEC BER degrading from 1.2e-6 to 8.4e-4 and OSNR dropping 4.8 dB due to a high-loss pinched splice on CBL-AIR-DSO-01\u2014allowing proactive hitless wavelength reroute via Karama.",
       "fault_type": "optical_degradation",
@@ -1549,8 +1500,7 @@
       "title": "5G Hub Site Rectifier AC Mains Loss & Battery LVD Countdown (gNB-BB-01)",
       "category": "Mobile RAN / Site Power",
       "operators": [
-        "du_converged",
-        "vi_india"
+        "uae_converged"
       ],
       "summary": "Commercial 3-phase AC mains fails at Business Bay 5G Hub site (gNB-BB-01). Ericsson ENM reports rectifier AC loss and DC bus discharging on VRLA battery bank (44.1V, LVD cut-off at 43.2V, 36 mins remaining). If LVD trips, gNB-BB-01 and 2 daisy-chained 5G tail sites (9 cells total) will go dark. Copilot correlates 3GPP PM counters and dispatches mobile diesel generator before LVD disconnect.",
       "fault_type": "ran_battery_lvd",
@@ -1561,20 +1511,19 @@
       "title": "80 GHz E-Band Microwave Rain-Fade vs. Hardware Fault (Academic City gNB-DSO-04)",
       "category": "Mobile RAN / Microwave Transport",
       "operators": [
-        "vi_india",
-        "du_converged"
+        "uae_converged"
       ],
       "summary": "Intense convective rain squall (42 mm/hr) crosses Silicon Oasis & Academic City. Microwave link MW-DSO-ACAD-80G drops RSL from -38 dBm to -69 dBm and downshifts ACM modulation from 1024QAM (10 Gbps) to QPSK (650 Mbps). Copilot correlates correlated weather fade across adjacent links and suppresses a false ODU/transceiver hardware replacement truck roll.",
       "fault_type": "microwave_rain_fade",
       "target_node": "RAN_DSO_MW1"
     },
     {
-      "id": "pccw_subsea_shunt_fault",
+      "id": "subsea_shunt_fault",
       "title": "Subsea Wet-Plant Repeater Shunt Fault & C-OTDR Localization (Jebel Ali CLS)",
       "category": "Subsea Wet-Plant / Wholesale DCI",
       "operators": [
-        "pccw_subsea",
-        "du_converged"
+        "uae_subsea_dci",
+        "uae_converged"
       ],
       "summary": "Power Feed Equipment (PFE-JBL-01) at Jebel Ali Cable Landing Station detects a high-resistance insulation shunt fault on subsea cable SUBSEA-FALCON-JBL-MUM (+4,120V drops to +2,890V at 0.95A constant current). Coherent OTDR (C-OTDR) localizes the wet-plant shunt 14.2 km seaward of Repeater R07 (Span 7-8, 68m depth). Copilot switches PFE to single-end feeding and reroutes 400G DCI traffic over diverse terrestrial/subsea path.",
       "fault_type": "subsea_shunt",

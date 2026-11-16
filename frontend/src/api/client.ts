@@ -15,6 +15,15 @@ export const nocApi = {
     return r.json();
   },
 
+  async switchRegion(regionId: string): Promise<void> {
+    const r = await fetch('/api/v1/region/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ region_id: regionId }),
+    });
+    if (!r.ok) throw new Error(`Failed to switch region to ${regionId}`);
+  },
+
   async triggerScenario(scenarioId: string): Promise<void> {
     const r = await fetch('/api/v1/faults/trigger', {
       method: 'POST',

@@ -1,0 +1,1180 @@
+{
+  "dataset_id": "india_ncr",
+  "dataset_name": "India \u2014 Delhi NCR",
+  "currency": "INR",
+  "map_center": [
+    77.245,
+    28.565
+  ],
+  "map_zoom": 10.4,
+  "operator_profiles": {
+    "in_metro_dci": {
+      "id": "in_metro_dci",
+      "name": "Pure-Play Metro Fibre, Dark Fibre & Hyperscale DCI Operator (India)",
+      "short_name": "Metro Fibre, Dark Fibre & DCI",
+      "region": "India \u2014 Delhi NCR (Gurugram \u00b7 CP \u00b7 Noida)",
+      "currency": "INR",
+      "active_packs": [
+        "fibre_osp",
+        "dwdm_optical",
+        "ip_mpls",
+        "enterprise_sla"
+      ],
+      "active_oems": [
+        "ciena_mcp",
+        "nokia_nsp",
+        "nmsworks_cygnet",
+        "lepton_gis",
+        "viavi_onmsi",
+        "exfo_nova",
+        "comviva_bss",
+        "jira_sm",
+        "servicenow_itsm"
+      ],
+      "description": "Dense metro trunk & dark-fibre operator linking Gurugram Cyber City, Connaught Place, Nehru Place, and Noida / Greater Noida Hyperscale AI Data Centres with 100G/400G DWDM wavelengths, Yamuna bridge SRLG audits, and live 1625nm OTDR monitoring."
+    },
+    "in_ran_converged": {
+      "id": "in_ran_converged",
+      "name": "High-Density 4G/5G Mobile RAN, Metro Fibre & Microwave Operator (India)",
+      "short_name": "4G/5G RAN + Metro Fibre + Microwave",
+      "region": "India \u2014 Delhi NCR (5G & Metro Rings)",
+      "currency": "INR",
+      "active_packs": [
+        "fibre_osp",
+        "dwdm_optical",
+        "ip_mpls",
+        "mobile_ran",
+        "gpon_access",
+        "enterprise_sla"
+      ],
+      "active_oems": [
+        "ciena_mcp",
+        "nokia_nsp",
+        "nmsworks_cygnet",
+        "lepton_gis",
+        "viavi_onmsi",
+        "ericsson_enm",
+        "comviva_bss",
+        "jira_sm",
+        "servicenow_itsm"
+      ],
+      "description": "High-scale 4G/5G RAN & metro backhaul network across Delhi, Gurugram, and Noida: hub-and-tail gNodeBs, 80 GHz E-Band monsoon rain-fade filtering, rectifier AC grid / VRLA battery LVD countdowns, GPON Dying-Gasp power disambiguation, and civil roadwork cuts."
+    }
+  },
+  "nodes": {
+    "GGN": {
+      "kind": "pop",
+      "name": "Gurugram Cyber City POP",
+      "lat": 28.495,
+      "lon": 77.089
+    },
+    "AERO": {
+      "kind": "pop",
+      "name": "Aerocity & IGI Gateway POP",
+      "lat": 28.5505,
+      "lon": 77.121
+    },
+    "CP": {
+      "kind": "pop",
+      "name": "Connaught Place Core POP",
+      "lat": 28.6315,
+      "lon": 77.2167
+    },
+    "NP": {
+      "kind": "pop",
+      "name": "Nehru Place & Okhla POP",
+      "lat": 28.5494,
+      "lon": 77.2519
+    },
+    "NOI": {
+      "kind": "pop",
+      "name": "Noida Sector 62 DCI POP",
+      "lat": 28.6208,
+      "lon": 77.3639
+    },
+    "GNOI": {
+      "kind": "pop",
+      "name": "Greater Noida Hyperscale POP",
+      "lat": 28.4744,
+      "lon": 77.504
+    },
+    "J_NH48": {
+      "kind": "junction",
+      "name": "NH-48 Shankar Chowk",
+      "lat": 28.518,
+      "lon": 77.0985
+    },
+    "J_DHAULA": {
+      "kind": "junction",
+      "name": "Dhaula Kuan Ring Rd",
+      "lat": 28.5921,
+      "lon": 77.1616
+    },
+    "J_AIIMS": {
+      "kind": "junction",
+      "name": "South Ex Ring Rd",
+      "lat": 28.5685,
+      "lon": 77.2215
+    },
+    "J_KG": {
+      "kind": "junction",
+      "name": "Barakhamba KG Marg Gate",
+      "lat": 28.6285,
+      "lon": 77.2235
+    },
+    "J_ITO": {
+      "kind": "junction",
+      "name": "ITO Yamuna West",
+      "lat": 28.6275,
+      "lon": 77.2455
+    },
+    "J_VIKAS": {
+      "kind": "junction",
+      "name": "Laxmi Nagar Yamuna East",
+      "lat": 28.6305,
+      "lon": 77.2775
+    },
+    "J_DNDW": {
+      "kind": "junction",
+      "name": "Maharani Bagh DND West",
+      "lat": 28.5735,
+      "lon": 77.2635
+    },
+    "J_DNDE": {
+      "kind": "junction",
+      "name": "Mayur Vihar DND Toll East",
+      "lat": 28.5815,
+      "lon": 77.3015
+    },
+    "J_OKHLA": {
+      "kind": "junction",
+      "name": "Kalindi Kunj Okhla Barrage",
+      "lat": 28.5445,
+      "lon": 77.306
+    },
+    "J_NEXP": {
+      "kind": "junction",
+      "name": "Noida Sec-142 Expressway",
+      "lat": 28.502,
+      "lon": 77.411
+    },
+    "C_BNB": {
+      "kind": "customer",
+      "name": "Bharat National Bank HQ",
+      "lat": 28.6302,
+      "lon": 77.2212
+    },
+    "C_YADC": {
+      "kind": "customer",
+      "name": "Yamuna Hyperscale AI Cloud DC",
+      "lat": 28.4795,
+      "lon": 77.509
+    },
+    "C_NSDC": {
+      "kind": "customer",
+      "name": "Noida Sovereign GPU Cloud",
+      "lat": 28.6248,
+      "lon": 77.3695
+    },
+    "C_OKIND": {
+      "kind": "customer",
+      "name": "Okhla Phase-III Smart-Grid Hub",
+      "lat": 28.536,
+      "lon": 77.2715
+    },
+    "C_SDHC": {
+      "kind": "customer",
+      "name": "Capital Medicity Hospital",
+      "lat": 28.5672,
+      "lon": 77.21
+    },
+    "C_IGIC": {
+      "kind": "customer",
+      "name": "IGI Air Cargo Logistics Hub",
+      "lat": 28.5565,
+      "lon": 77.112
+    },
+    "RAN_NOI_HUB": {
+      "kind": "cellsite",
+      "name": "gNB-NOI-01 Sector 18 Hub Site",
+      "lat": 28.5705,
+      "lon": 77.3215
+    },
+    "RAN_NOI_T1": {
+      "kind": "cellsite",
+      "name": "gNB-NOI-02 Film City Sec-16A Tail",
+      "lat": 28.567,
+      "lon": 77.316
+    },
+    "RAN_NOI_T2": {
+      "kind": "cellsite",
+      "name": "gNB-NOI-03 Sector 15 Metro Tail",
+      "lat": 28.583,
+      "lon": 77.3115
+    },
+    "RAN_GGN_HUB": {
+      "kind": "cellsite",
+      "name": "gNB-GGN-01 CyberHub DLF Hub",
+      "lat": 28.4962,
+      "lon": 77.0882
+    },
+    "RAN_EXP_MW1": {
+      "kind": "cellsite",
+      "name": "gNB-EXP-04 Noida Sec-125 Microwave Tail",
+      "lat": 28.544,
+      "lon": 77.333
+    }
+  },
+  "ducts": [
+    {
+      "id": "D-GGN-NH48",
+      "a": "GGN",
+      "b": "J_NH48"
+    },
+    {
+      "id": "D-NH48-AERO",
+      "a": "J_NH48",
+      "b": "AERO"
+    },
+    {
+      "id": "D-AERO-DHAULA",
+      "a": "AERO",
+      "b": "J_DHAULA"
+    },
+    {
+      "id": "D-DHAULA-CP",
+      "a": "J_DHAULA",
+      "b": "CP"
+    },
+    {
+      "id": "D-AERO-AIIMS",
+      "a": "AERO",
+      "b": "J_AIIMS"
+    },
+    {
+      "id": "D-AIIMS-NP",
+      "a": "J_AIIMS",
+      "b": "NP"
+    },
+    {
+      "id": "D-GGN-NP-SOHNA",
+      "a": "GGN",
+      "b": "NP"
+    },
+    {
+      "id": "D-CP-KG",
+      "a": "CP",
+      "b": "J_KG"
+    },
+    {
+      "id": "D-NP-KG",
+      "a": "NP",
+      "b": "J_KG"
+    },
+    {
+      "id": "D-KG-BNB",
+      "a": "J_KG",
+      "b": "C_BNB"
+    },
+    {
+      "id": "D-CP-ITO",
+      "a": "CP",
+      "b": "J_ITO"
+    },
+    {
+      "id": "D-ITO-VIKAS",
+      "a": "J_ITO",
+      "b": "J_VIKAS",
+      "bridge": "ITO Yamuna Barrage Bridge"
+    },
+    {
+      "id": "D-VIKAS-NOI",
+      "a": "J_VIKAS",
+      "b": "NOI"
+    },
+    {
+      "id": "D-VIKAS-GNOI",
+      "a": "J_VIKAS",
+      "b": "GNOI"
+    },
+    {
+      "id": "D-NP-DNDW",
+      "a": "NP",
+      "b": "J_DNDW"
+    },
+    {
+      "id": "D-DNDW-DNDE",
+      "a": "J_DNDW",
+      "b": "J_DNDE",
+      "bridge": "DND Flyway Yamuna Bridge"
+    },
+    {
+      "id": "D-DNDE-NOI",
+      "a": "J_DNDE",
+      "b": "NOI"
+    },
+    {
+      "id": "D-DNDE-RANHUB",
+      "a": "J_DNDE",
+      "b": "RAN_NOI_HUB"
+    },
+    {
+      "id": "D-RANHUB-T1",
+      "a": "RAN_NOI_HUB",
+      "b": "RAN_NOI_T1"
+    },
+    {
+      "id": "D-RANHUB-T2",
+      "a": "RAN_NOI_HUB",
+      "b": "RAN_NOI_T2"
+    },
+    {
+      "id": "D-NOI-NEXP",
+      "a": "NOI",
+      "b": "J_NEXP"
+    },
+    {
+      "id": "D-NEXP-GNOI",
+      "a": "J_NEXP",
+      "b": "GNOI"
+    },
+    {
+      "id": "D-GNOI-YADC",
+      "a": "GNOI",
+      "b": "C_YADC"
+    },
+    {
+      "id": "D-NOI-NSDC",
+      "a": "NOI",
+      "b": "C_NSDC"
+    },
+    {
+      "id": "D-NP-OKIND",
+      "a": "NP",
+      "b": "C_OKIND"
+    },
+    {
+      "id": "D-AIIMS-SDHC",
+      "a": "J_AIIMS",
+      "b": "C_SDHC"
+    },
+    {
+      "id": "D-AERO-IGIC",
+      "a": "AERO",
+      "b": "C_IGIC"
+    }
+  ],
+  "cables": [
+    {
+      "id": "CBL-GGN-AERO-01",
+      "path": [
+        "GGN",
+        "J_NH48",
+        "AERO"
+      ],
+      "fibres": 144,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-AERO-CP-01",
+      "path": [
+        "AERO",
+        "J_DHAULA",
+        "CP"
+      ],
+      "fibres": 144,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-AERO-NP-01",
+      "path": [
+        "AERO",
+        "J_AIIMS",
+        "NP"
+      ],
+      "fibres": 96,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-GGN-NP-01",
+      "path": [
+        "GGN",
+        "NP"
+      ],
+      "fibres": 96,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-CP-NP-01",
+      "path": [
+        "CP",
+        "J_KG",
+        "NP"
+      ],
+      "fibres": 96,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-CP-NOI-01",
+      "path": [
+        "CP",
+        "J_ITO",
+        "J_VIKAS",
+        "NOI"
+      ],
+      "fibres": 144,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-NP-NOI-01",
+      "path": [
+        "NP",
+        "J_DNDW",
+        "J_DNDE",
+        "NOI"
+      ],
+      "fibres": 144,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-NOI-GNOI-01",
+      "path": [
+        "NOI",
+        "J_NEXP",
+        "GNOI"
+      ],
+      "fibres": 144,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-CP-GNOI-01",
+      "path": [
+        "CP",
+        "J_ITO",
+        "J_VIKAS",
+        "GNOI"
+      ],
+      "fibres": 96,
+      "role": "trunk",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-CP-BNB-01",
+      "path": [
+        "CP",
+        "J_KG",
+        "C_BNB"
+      ],
+      "fibres": 24,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-NP-BNB-01",
+      "path": [
+        "NP",
+        "J_KG",
+        "C_BNB"
+      ],
+      "fibres": 24,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-GNOI-YADC-01",
+      "path": [
+        "GNOI",
+        "C_YADC"
+      ],
+      "fibres": 48,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-NOI-NSDC-01",
+      "path": [
+        "NOI",
+        "C_NSDC"
+      ],
+      "fibres": 48,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-NP-OKIND-01",
+      "path": [
+        "NP",
+        "C_OKIND"
+      ],
+      "fibres": 24,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-NP-SDHC-01",
+      "path": [
+        "NP",
+        "J_AIIMS",
+        "C_SDHC"
+      ],
+      "fibres": 24,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-AERO-IGIC-01",
+      "path": [
+        "AERO",
+        "C_IGIC"
+      ],
+      "fibres": 12,
+      "role": "access",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-NOI-RANHUB-01",
+      "path": [
+        "NP",
+        "J_DNDW",
+        "J_DNDE",
+        "RAN_NOI_HUB"
+      ],
+      "fibres": 48,
+      "role": "ran_backhaul",
+      "helix_factor": 1.015
+    },
+    {
+      "id": "CBL-RAN-NOIT1-01",
+      "path": [
+        "RAN_NOI_HUB",
+        "RAN_NOI_T1"
+      ],
+      "fibres": 24,
+      "role": "ran_backhaul",
+      "helix_factor": 1.012
+    },
+    {
+      "id": "CBL-RAN-NOIT2-01",
+      "path": [
+        "RAN_NOI_HUB",
+        "RAN_NOI_T2"
+      ],
+      "fibres": 24,
+      "role": "ran_backhaul",
+      "helix_factor": 1.012
+    }
+  ],
+  "optical_controllers": {
+    "GGN": "ciena",
+    "AERO": "ciena",
+    "CP": "ciena",
+    "NP": "ciena",
+    "NOI": "nokia",
+    "GNOI": "nokia"
+  },
+  "oms_links": [
+    {
+      "a": "GGN",
+      "b": "AERO",
+      "cable_id": "CBL-GGN-AERO-01"
+    },
+    {
+      "a": "AERO",
+      "b": "CP",
+      "cable_id": "CBL-AERO-CP-01"
+    },
+    {
+      "a": "AERO",
+      "b": "NP",
+      "cable_id": "CBL-AERO-NP-01"
+    },
+    {
+      "a": "GGN",
+      "b": "NP",
+      "cable_id": "CBL-GGN-NP-01"
+    },
+    {
+      "a": "CP",
+      "b": "NP",
+      "cable_id": "CBL-CP-NP-01"
+    },
+    {
+      "a": "CP",
+      "b": "NOI",
+      "cable_id": "CBL-CP-NOI-01"
+    },
+    {
+      "a": "NP",
+      "b": "NOI",
+      "cable_id": "CBL-NP-NOI-01"
+    },
+    {
+      "a": "NOI",
+      "b": "GNOI",
+      "cable_id": "CBL-NOI-GNOI-01"
+    },
+    {
+      "a": "CP",
+      "b": "GNOI",
+      "cable_id": "CBL-CP-GNOI-01"
+    }
+  ],
+  "wavelengths": [
+    {
+      "id": "OCH-GGN-CP-1",
+      "path": [
+        "GGN",
+        "AERO",
+        "CP"
+      ],
+      "rate": "400G",
+      "freq": 193.1
+    },
+    {
+      "id": "OCH-CP-NOI-1",
+      "path": [
+        "CP",
+        "NOI"
+      ],
+      "rate": "400G",
+      "freq": 193.2
+    },
+    {
+      "id": "OCH-NP-NOI-1",
+      "path": [
+        "NP",
+        "NOI"
+      ],
+      "rate": "100G",
+      "freq": 193.3
+    },
+    {
+      "id": "OCH-NOI-GNOI-1",
+      "path": [
+        "NOI",
+        "GNOI"
+      ],
+      "rate": "400G",
+      "freq": 193.4
+    },
+    {
+      "id": "OCH-YADC-W",
+      "path": [
+        "GGN",
+        "AERO",
+        "NP",
+        "NOI",
+        "GNOI"
+      ],
+      "rate": "100G",
+      "freq": 193.6,
+      "service": "SVC-YADC-WAVE-100G",
+      "leg": "working"
+    },
+    {
+      "id": "OCH-YADC-P",
+      "path": [
+        "GGN",
+        "NP",
+        "NOI",
+        "GNOI"
+      ],
+      "rate": "100G",
+      "freq": 193.65,
+      "service": "SVC-YADC-WAVE-100G",
+      "leg": "protect"
+    },
+    {
+      "id": "OCH-NSDC-GNOI",
+      "path": [
+        "NOI",
+        "GNOI"
+      ],
+      "rate": "100G",
+      "freq": 193.7,
+      "service": "SVC-NSDC-DCI-100G",
+      "leg": "working"
+    }
+  ],
+  "routers": {
+    "GGN": {
+      "vendor": "cisco",
+      "model": "ASR 9910"
+    },
+    "AERO": {
+      "vendor": "juniper",
+      "model": "MX960"
+    },
+    "CP": {
+      "vendor": "cisco",
+      "model": "NCS 5508"
+    },
+    "NP": {
+      "vendor": "juniper",
+      "model": "MX480"
+    },
+    "NOI": {
+      "vendor": "nokia",
+      "model": "7750 SR-7s"
+    },
+    "GNOI": {
+      "vendor": "cisco",
+      "model": "8808"
+    }
+  },
+  "ip_links": [
+    {
+      "a": "GGN",
+      "b": "CP",
+      "transport": "OCH-GGN-CP-1"
+    },
+    {
+      "a": "CP",
+      "b": "NOI",
+      "transport": "OCH-CP-NOI-1"
+    },
+    {
+      "a": "NP",
+      "b": "NOI",
+      "transport": "OCH-NP-NOI-1"
+    },
+    {
+      "a": "NOI",
+      "b": "GNOI",
+      "transport": "OCH-NOI-GNOI-1"
+    },
+    {
+      "a": "CP",
+      "b": "NP",
+      "transport": "CBL-CP-NP-01"
+    }
+  ],
+  "ran_sites": [
+    {
+      "id": "RAN_NOI_HUB",
+      "name": "gNB-NOI-01 Sector 18 Hub Site",
+      "vendor": "ericsson",
+      "controller": "ericsson_enm",
+      "pop_anchor": "NOI",
+      "backhaul_type": "fibre",
+      "backhaul_cable": "CBL-NOI-RANHUB-01",
+      "cells": [
+        "CELL-NOI01-N78-S1",
+        "CELL-NOI01-N78-S2",
+        "CELL-NOI01-N78-S3",
+        "CELL-NOI01-B3-S1"
+      ],
+      "downstream_tails": [
+        "RAN_NOI_T1",
+        "RAN_NOI_T2"
+      ],
+      "battery_backup_hours": 4.0
+    },
+    {
+      "id": "RAN_NOI_T1",
+      "name": "gNB-NOI-02 Film City Sec-16A Tail",
+      "vendor": "ericsson",
+      "controller": "ericsson_enm",
+      "pop_anchor": "NOI",
+      "hub_site": "RAN_NOI_HUB",
+      "backhaul_type": "fibre_daisy",
+      "backhaul_cable": "CBL-RAN-NOIT1-01",
+      "cells": [
+        "CELL-NOI02-N78-S1",
+        "CELL-NOI02-N78-S2",
+        "CELL-NOI02-B3-S1"
+      ],
+      "downstream_tails": [],
+      "battery_backup_hours": 2.5
+    },
+    {
+      "id": "RAN_NOI_T2",
+      "name": "gNB-NOI-03 Sector 15 Metro Tail",
+      "vendor": "ericsson",
+      "controller": "ericsson_enm",
+      "pop_anchor": "NOI",
+      "hub_site": "RAN_NOI_HUB",
+      "backhaul_type": "fibre_daisy",
+      "backhaul_cable": "CBL-RAN-NOIT2-01",
+      "cells": [
+        "CELL-NOI03-N78-S1",
+        "CELL-NOI03-N78-S2"
+      ],
+      "downstream_tails": [],
+      "battery_backup_hours": 2.5
+    },
+    {
+      "id": "RAN_GGN_HUB",
+      "name": "gNB-GGN-01 CyberHub DLF Hub",
+      "vendor": "nokia",
+      "controller": "nokia_nsp",
+      "pop_anchor": "GGN",
+      "backhaul_type": "fibre",
+      "backhaul_cable": "CBL-GGN-AERO-01",
+      "cells": [
+        "CELL-GGN01-N78-S1",
+        "CELL-GGN01-N78-S2",
+        "CELL-GGN01-B3-S1"
+      ],
+      "downstream_tails": [],
+      "battery_backup_hours": 4.0
+    },
+    {
+      "id": "RAN_EXP_MW1",
+      "name": "gNB-EXP-04 Noida Sec-125 Microwave Tail",
+      "vendor": "nokia",
+      "controller": "nokia_nsp",
+      "pop_anchor": "NOI",
+      "backhaul_type": "microwave_eband",
+      "mw_link_id": "MW-NOI-EXP-80G",
+      "cells": [
+        "CELL-EXP04-N78-S1",
+        "CELL-EXP04-B3-S1"
+      ],
+      "downstream_tails": [],
+      "battery_backup_hours": 3.0
+    }
+  ],
+  "gpon_splitter_clusters": [
+    {
+      "id": "SPL-NP-OKH-01",
+      "olt_id": "OLT-NP-NK-01",
+      "pop": "NP",
+      "feeder_cable": "CBL-NP-OKIND-01",
+      "ont_count": 28,
+      "district": "Okhla Industrial Estate Phase-III"
+    },
+    {
+      "id": "SPL-GGN-CYB-02",
+      "olt_id": "OLT-GGN-HW-01",
+      "pop": "GGN",
+      "feeder_cable": "CBL-GGN-AERO-01",
+      "ont_count": 32,
+      "district": "DLF Cyber City Phase-II"
+    }
+  ],
+  "customers": [
+    {
+      "id": "CUST-2001",
+      "node": "C_BNB",
+      "name": "Bharat National Bank HQ",
+      "segment": "BFSI",
+      "tier": "Platinum",
+      "contact": "noc-bfsi@bnbank.in"
+    },
+    {
+      "id": "CUST-2002",
+      "node": "C_YADC",
+      "name": "Yamuna Hyperscale AI Cloud DC",
+      "segment": "Hyperscale / AI DC",
+      "tier": "Platinum",
+      "contact": "dci-noc@yamunacloud.in"
+    },
+    {
+      "id": "CUST-2003",
+      "node": "C_NSDC",
+      "name": "Noida Sovereign GPU Cloud",
+      "segment": "AI Compute / DCI",
+      "tier": "Platinum",
+      "contact": "netops@noidagpu.in"
+    },
+    {
+      "id": "CUST-2004",
+      "node": "C_OKIND",
+      "name": "Okhla Phase-III Smart-Grid Hub",
+      "segment": "Energy & Industrial IoT",
+      "tier": "Silver",
+      "contact": "scada@okhlagrid.in"
+    },
+    {
+      "id": "CUST-2005",
+      "node": "C_SDHC",
+      "name": "Capital Medicity Hospital",
+      "segment": "Healthcare",
+      "tier": "Gold",
+      "contact": "it-ops@capitalmedicity.in"
+    },
+    {
+      "id": "CUST-2006",
+      "node": "C_IGIC",
+      "name": "IGI Air Cargo Logistics Hub",
+      "segment": "Aviation & Logistics",
+      "tier": "Gold",
+      "contact": "ops@igicargo.in"
+    }
+  ],
+  "sla_tiers": {
+    "Platinum": {
+      "availability": 99.99,
+      "mttr_hours": 4.0,
+      "penalty_per_hour_aed": 450000
+    },
+    "Gold": {
+      "availability": 99.95,
+      "mttr_hours": 8.0,
+      "penalty_per_hour_aed": 150000
+    },
+    "Silver": {
+      "availability": 99.9,
+      "mttr_hours": 24.0,
+      "penalty_per_hour_aed": 35000
+    }
+  },
+  "services": [
+    {
+      "id": "SVC-BNB-L3VPN-01",
+      "customer": "CUST-2001",
+      "type": "L3VPN",
+      "bw": "10G",
+      "legs": [
+        {
+          "name": "primary",
+          "pop": "CP",
+          "cable": "CBL-CP-BNB-01"
+        },
+        {
+          "name": "secondary",
+          "pop": "NP",
+          "cable": "CBL-NP-BNB-01"
+        }
+      ],
+      "ordered_diverse": true
+    },
+    {
+      "id": "SVC-YADC-WAVE-100G",
+      "customer": "CUST-2002",
+      "type": "Wavelength",
+      "bw": "100G",
+      "legs": [
+        {
+          "name": "working",
+          "och": "OCH-YADC-W",
+          "cable": "CBL-GNOI-YADC-01"
+        },
+        {
+          "name": "protect",
+          "och": "OCH-YADC-P",
+          "cable": "CBL-GNOI-YADC-01"
+        }
+      ],
+      "ordered_diverse": true
+    },
+    {
+      "id": "SVC-NSDC-DCI-100G",
+      "customer": "CUST-2003",
+      "type": "Wavelength",
+      "bw": "100G",
+      "legs": [
+        {
+          "name": "working",
+          "och": "OCH-NSDC-GNOI",
+          "cable": "CBL-NOI-NSDC-01"
+        }
+      ]
+    },
+    {
+      "id": "SVC-OKIND-DIA-01",
+      "customer": "CUST-2004",
+      "type": "DIA",
+      "bw": "1G",
+      "legs": [
+        {
+          "name": "primary",
+          "pop": "NP",
+          "cable": "CBL-NP-OKIND-01"
+        }
+      ]
+    },
+    {
+      "id": "SVC-SDHC-DIA-01",
+      "customer": "CUST-2005",
+      "type": "DIA",
+      "bw": "10G",
+      "legs": [
+        {
+          "name": "primary",
+          "pop": "NP",
+          "cable": "CBL-NP-SDHC-01"
+        }
+      ]
+    },
+    {
+      "id": "SVC-IGIC-L3VPN-01",
+      "customer": "CUST-2006",
+      "type": "L3VPN",
+      "bw": "1G",
+      "legs": [
+        {
+          "name": "primary",
+          "pop": "AERO",
+          "cable": "CBL-AERO-IGIC-01"
+        }
+      ]
+    }
+  ],
+  "rfts": [
+    {
+      "id": "ONMSI-RTU-NP",
+      "vendor": "viavi",
+      "pop": "NP",
+      "monitors": [
+        "CBL-NP-NOI-01",
+        "CBL-NP-OKIND-01",
+        "CBL-NP-BNB-01",
+        "CBL-NOI-RANHUB-01"
+      ]
+    },
+    {
+      "id": "ONMSI-RTU-CP",
+      "vendor": "viavi",
+      "pop": "CP",
+      "monitors": [
+        "CBL-CP-NOI-01",
+        "CBL-CP-BNB-01",
+        "CBL-CP-NP-01",
+        "CBL-AERO-CP-01",
+        "CBL-CP-GNOI-01"
+      ]
+    },
+    {
+      "id": "ONMSI-RTU-GGN",
+      "vendor": "viavi",
+      "pop": "GGN",
+      "monitors": [
+        "CBL-GGN-AERO-01",
+        "CBL-GGN-NP-01",
+        "CBL-AERO-NP-01",
+        "CBL-AERO-IGIC-01"
+      ]
+    },
+    {
+      "id": "NOVA-RTU-NOI",
+      "vendor": "exfo",
+      "pop": "NOI",
+      "monitors": [
+        "CBL-NOI-GNOI-01",
+        "CBL-NOI-NSDC-01",
+        "CBL-GNOI-YADC-01"
+      ]
+    }
+  ],
+  "subsea_systems": [
+    {
+      "id": "SUBSEA-WEST-MUM-NCR",
+      "name": "WEST-INDIA Subsea Gateway (Mumbai CLS <-> Delhi NCR NLD Express)",
+      "cls_node": "GGN",
+      "pfe_id": "PFE-MUM-CLS-02",
+      "total_length_km": 2180.0,
+      "repeater_count": 31,
+      "repeater_spacing_km": 70.3,
+      "branching_unit": "BU-ARABIAN-02",
+      "design_capacity_tbps": 64.0,
+      "carried_services": [
+        "SVC-YADC-WAVE-100G"
+      ]
+    }
+  ],
+  "fault_scenarios": [
+    {
+      "id": "ncr_dnd_yamuna_fibre_cut",
+      "title": "Metro Trunk Fibre Cut + Hidden SRLG Backup Failure (DND Flyway Yamuna Bridge)",
+      "category": "Fibre Cut / Multi-Vendor Storm",
+      "operators": [
+        "in_metro_dci",
+        "in_ran_converged"
+      ],
+      "summary": "Civil roadwork near DND Flyway Yamuna Bridge severs 144F trunk CBL-NP-NOI-01 between Nehru Place and Noida. Collapses optical, router, OTDR, and 3 cascading Noida 5G sites onto 1 physical dig pin while rerouting Yamuna Hyperscale AI Cloud 100G wave over the ITO northern Yamuna crossing.",
+      "fault_type": "fibre_cut",
+      "target_cable": "CBL-NP-NOI-01",
+      "cut_ratio": 0.58
+    },
+    {
+      "id": "cp_bank_srlg_cut",
+      "title": "Dual-Homed Bank HQ Outage via Shared Chamber (Connaught Place KG Marg SRLG)",
+      "category": "Enterprise SLA / False Diversity",
+      "operators": [
+        "in_metro_dci",
+        "in_ran_converged"
+      ],
+      "summary": "Utility trenching outside Barakhamba / KG Marg Chamber (J_KG) cuts duct D-KG-BNB, severing both primary (CP POP) and secondary (Nehru Place POP) 10G L3VPN fibres for Bharat National Bank HQ.",
+      "fault_type": "duct_cut",
+      "target_duct": "D-KG-BNB",
+      "cut_ratio": 0.48
+    },
+    {
+      "id": "okhla_dying_gasp_vs_cut",
+      "title": "Premises Power Blackout (\"Dying Gasp\") vs. Fibre Cut Disambiguation (Okhla Phase-III)",
+      "category": "GPON / Smart-Grid Triage",
+      "operators": [
+        "in_ran_converged",
+        "in_metro_dci"
+      ],
+      "summary": "28 industrial ONTs and smart-grid modems in Okhla Phase-III drop within 650ms. Correlating G.984 Dying-Gasp bursts on SPL-NP-OKH-01 with a clean 1625nm OTDR continuity shot on CBL-NP-OKIND-01 proves a feeder power trip and suppresses a wasted splice truck roll.",
+      "fault_type": "power_outage",
+      "target_node": "C_OKIND",
+      "target_cable": "CBL-NP-OKIND-01",
+      "target_splitter": "SPL-NP-OKH-01",
+      "target_service": "SVC-OKIND-DIA-01"
+    },
+    {
+      "id": "noida_dci_optical_degradation",
+      "title": "Pre-Failure DWDM OSNR & Pre-FEC BER Degradation (Noida <-> Greater Noida AI DC)",
+      "category": "Predictive Optical / DCI Assurance",
+      "operators": [
+        "in_metro_dci",
+        "in_ran_converged"
+      ],
+      "summary": "Nokia NSP streaming telemetry detects Pre-FEC BER degrading to 8.4e-4 and OSNR dropping to 14.2 dB on Noida Sovereign GPU Cloud 100G wave (OCH-NSDC-GNOI) due to a +4.8 dB pinched splice along Noida Expressway cable CBL-NOI-GNOI-01\u2014staging a proactive hitless reroute via Connaught Place.",
+      "fault_type": "optical_degradation",
+      "target_cable": "CBL-NOI-GNOI-01",
+      "target_och": "OCH-NSDC-GNOI",
+      "target_service": "SVC-NSDC-DCI-100G",
+      "cut_ratio": 0.42
+    },
+    {
+      "id": "ncr_ran_battery_lvd_countdown",
+      "title": "5G Hub Site Rectifier AC Mains Loss & Battery LVD Countdown (Noida Sec-18 gNB-NOI-01)",
+      "category": "Mobile RAN / Site Power",
+      "operators": [
+        "in_ran_converged"
+      ],
+      "summary": "Commercial 3-phase AC grid fails at Noida Sector 18 5G Hub (gNB-NOI-01); DC bus discharges to 44.1V (36 mins until 43.2V LVD cutoff cascades 2 tail sites in Film City & Sector 15). Dispatches mobile DG set while OTDR confirms backhaul fibre is intact.",
+      "fault_type": "ran_battery_lvd",
+      "target_node": "RAN_NOI_HUB"
+    },
+    {
+      "id": "noida_eband_monsoon_rain_fade",
+      "title": "80 GHz E-Band Monsoon Rain-Fade vs. Hardware Fault (Noida Expressway gNB-EXP-04)",
+      "category": "Mobile RAN / Microwave Transport",
+      "operators": [
+        "in_ran_converged"
+      ],
+      "summary": "Heavy monsoon squall (48 mm/hr) over Noida Expressway attenuates 80 GHz link MW-NOI-EXP-80G (-38.2 -> -69.4 dBm) with automatic ACM downshift from 1024QAM to QPSK\u2014suppressing a false ODU hardware climb.",
+      "fault_type": "microwave_rain_fade",
+      "target_node": "RAN_EXP_MW1"
+    },
+    {
+      "id": "india_subsea_cls_shunt_fault",
+      "title": "Subsea Landing Repeater Shunt & NLD Wave Protection (Mumbai CLS <-> Delhi NCR)",
+      "category": "Subsea Wet-Plant / Wholesale DCI",
+      "operators": [
+        "in_metro_dci",
+        "in_ran_converged"
+      ],
+      "summary": "PFE voltage drop (+4,120V -> +2,890V) and C-OTDR shunt fault localized 386.4 km seaward of Mumbai CLS on WEST-INDIA Subsea Gateway feeding Delhi NCR DCI traffic\u2014staging single-end PFE feed & terrestrial NLD wave protection.",
+      "fault_type": "subsea_shunt",
+      "target_node": "GGN",
+      "target_subsea": "SUBSEA-WEST-MUM-NCR",
+      "target_och": "OCH-YADC-W",
+      "target_service": "SVC-YADC-WAVE-100G"
+    }
+  ]
+}

@@ -221,7 +221,20 @@ async def get_overview() -> dict[str, Any]:
     except Exception:
         pass
 
+    bss_state = tstates.get("comviva_bss", {})
+    active_currency = (
+        emu_status.get("currency")
+        or (bss_state.get("currency") if isinstance(bss_state, dict) else None)
+        or "AED"
+    )
+
     return {
+        "active_region": emu_status.get("active_region", "uae_dubai"),
+        "region_name": emu_status.get("region_name", "UAE — Dubai Metro"),
+        "currency": active_currency,
+        "map_center": emu_status.get("map_center", [55.245, 25.155]),
+        "map_zoom": emu_status.get("map_zoom", 10.9),
+        "available_regions": emu_status.get("available_regions", []),
         "connectors": connectors,
         "gis": {
             "ducts": ducts,
@@ -229,7 +242,7 @@ async def get_overview() -> dict[str, Any]:
             "cables": cables,
         },
         "topology": tstates.get("topology", {}),
-        "bss": tstates.get("comviva_bss", {}),
+        "bss": bss_state,
         "ciena_fres": tstates.get("ciena_fres", {}),
         "nokia_optical": tstates.get("nokia_optical", {}),
         "ran_telemetry": tstates.get("ericsson_ran", {}),
@@ -290,6 +303,55 @@ async def trigger_fault(req: TriggerFaultPayload) -> dict[str, Any]:
         "incidents": incidents,
         "alarms_emitted": len(alarms),
     }
+
+
+class RegionSwitchPayload(BaseModel):
+    region_id: str
+
+
+@app.post("/api/v1/region/switch")
+async def switch_region(req: RegionSwitchPayload) -> dict[str, Any]:
+    global LAST_BENCHMARK_RESULT
+    emu_base = get_emulator_control_base_url()
+    async with httpx.AsyncClient(timeout=12.0) as client:
+        r = await client.post(
+            f"{emu_base}/emulator/dataset/switch",
+            json={"region_id": req.region_id},
+        )
+        if r.status_code != 200:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        sw_data = r.json()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                TRUNCATE TABLE
+                    osp_ducts,
+                    osp_manholes,
+                    osp_cables,
+                    subsea_cables,
+                    rfts_units,
+                    oms_links,
+                    optical_channels,
+                    network_nodes,
+                    ip_links,
+                    ran_sites,
+                    gpon_clusters,
+                    sla_tiers,
+                    customers,
+                    customer_services,
+                    topology_state,
+                    alarms,
+                    incidents
+                RESTART IDENTITY CASCADE
+                """
+            )
+    RECENT_WIRE_PACKETS.clear()
+    LAST_BENCHMARK_RESULT = None
+    await sync_all_connectors()
+    log_audit("noc_operator", "REGION_SWITCHED", req.region_id, sw_data)
+    return sw_data
 
 
 @app.post("/api/v1/faults/reset")

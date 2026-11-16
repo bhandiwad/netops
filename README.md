@@ -72,16 +72,16 @@ flowchart TB
 
 ---
 
-## Multi-Operator Archetypes & Built-In Reference Scenarios
+## Multi-Region & Multi-Operator Reference Topologies
 
-Switchable in real time from the top navigation bar (reference topology loaded declaratively from [`emulators/datasets/dubai_metro.json`](emulators/datasets/dubai_metro.json), swappable via `TELCO_DATASET_PATH`):
+Switchable in real time from the top navigation bar across **UAE — Dubai Metro (`AED`)** ([`emulators/datasets/dubai_metro.json`](emulators/datasets/dubai_metro.json)) and **India — Delhi NCR (`INR`)** ([`emulators/datasets/delhi_ncr_metro.json`](emulators/datasets/delhi_ncr_metro.json)) — or swappable via `TELCO_DATASET_PATH`:
 
-| Archetype | Operator Profile | Active Network Layers & Focus |
+| Region | Customer Profile | Active Network Layers & Focus |
 | :--- | :--- | :--- |
-| **Converged National** | **Converged 4G/5G + Fibre + Enterprise** | Full 6-layer stack: OSP fibre, Ciena/Nokia DWDM, Cisco/Juniper IP/MPLS, Ericsson/Nokia 5G RAN hub-and-tail sites, GPON FTTH, and Enterprise SLAs. |
-| **Metro Fibre & DCI** | **Pure-Play Metro Fibre, Wavelength & DCI** | Dense metro trunk & access fibre, 100G/400G DWDM wavelengths, SRLG diversity enforcement, Lepton GIS slack modeling, and live 1625nm OTDR monitoring. |
-| **High-Density RAN** | **High-Scale 4G/5G RAN, Metro Fibre & Microwave** | Multi-vendor 4G/5G RAN, 80 GHz E-Band microwave rain-fade vs. hardware fault disambiguation, rectifier AC mains / VRLA battery LVD countdowns, and civil roadwork cuts. |
-| **Subsea & Wholesale** | **Global Subsea, Optical DCI & Wholesale Carrier** | Subsea Cable Landing Station (`CLS`), Power Feed Equipment (`PFE`) high-voltage shunt fault isolation, Coherent OTDR (`C-OTDR`) repeater span localization, and Pre-FEC BER tracking. |
+| **India — Delhi NCR** (`INR`) | **Metro Fibre, Dark Fibre & DCI** | Gurugram Cyber City – Aerocity – Connaught Place – Nehru Place – Noida / Greater Noida AI DC ring, 100G/400G DWDM waves, Yamuna bridge SRLG audits, and live 1625nm OTDR monitoring. |
+| **India — Delhi NCR** (`INR`) | **4G/5G RAN + Metro Fibre + Microwave** | High-density 4G/5G RAN hub-and-tail gNodeBs, 80 GHz E-Band monsoon rain-fade vs. hardware disambiguation, rectifier AC grid / VRLA battery LVD countdowns, and GPON `Dying Gasp` filtering. |
+| **UAE — Dubai Metro** (`AED`) | **Converged 4G/5G + Fibre + Enterprise** | Full 6-layer stack: OSP fibre, Ciena/Nokia DWDM, Cisco/Juniper IP/MPLS, Ericsson/Nokia 5G RAN hub-and-tail sites, GPON FTTH, and Enterprise SLAs. |
+| **UAE — Dubai Metro** (`AED`) | **Subsea CLS + 400G DCI + Wholesale** | Subsea Cable Landing Station (`CLS`), Power Feed Equipment (`PFE`) high-voltage shunt fault isolation, Coherent OTDR (`C-OTDR`) repeater span localization, and Pre-FEC BER tracking. |
 
 ### Seven Verified End-to-End Fault Scenarios
 
@@ -113,7 +113,8 @@ Switchable in real time from the top navigation bar (reference topology loaded d
 │   └── sor_codec.py                # Binary Telcordia SR-4731 Rev 2 (.sor) generator, parser & CRC-16
 ├── emulators/
 │   ├── datasets/
-│   │   └── dubai_metro.json        # Declarative reference topology dataset (swappable via TELCO_DATASET_PATH)
+│   │   ├── dubai_metro.json        # UAE — Dubai Metro reference topology (AED)
+│   │   └── delhi_ncr_metro.json    # India — Delhi NCR reference topology (INR, 2 profiles)
 │   └── emu/
 │       ├── spec.py                 # Declarative JSON dataset loader
 │       ├── roads.py                # OSRM street-following geometry + SHA-256 topology cache

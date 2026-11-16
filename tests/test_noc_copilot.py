@@ -69,7 +69,7 @@ def test_all_seven_scenarios_pgvector_and_storm_benchmark():
         # 4. Scenario 7: Subsea Wet-Plant Repeater Shunt Fault & C-OTDR
         r7 = client.post(
             f"{COPILOT_URL}/api/v1/faults/trigger",
-            json={"scenario_id": "pccw_subsea_shunt_fault"},
+            json={"scenario_id": "subsea_shunt_fault"},
         )
         assert r7.status_code == 200
         inc7 = r7.json()["incident"]
@@ -92,7 +92,49 @@ def test_all_seven_scenarios_pgvector_and_storm_benchmark():
         assert bdata["root_causes_identified"] == 3
         assert bdata["noise_reduction_pct"] > 99.9
 
-        # 7. Leave Scenario 1 active so UI opens with a rich multi-layer incident ready to inspect
+        # 7. Switch to India — Delhi NCR region, verify 2 India customer profiles, INR SLAs & scenarios
+        r_sw_in = client.post(
+            f"{COPILOT_URL}/api/v1/region/switch",
+            json={"region_id": "india_ncr"},
+        )
+        assert r_sw_in.status_code == 200
+        ov_in = client.get(f"{COPILOT_URL}/api/v1/overview").json()
+        assert ov_in["active_region"] == "india_ncr"
+        assert ov_in["currency"] == "INR"
+        assert set(ov_in["operator_profiles"].keys()) == {"in_metro_dci", "in_ran_converged"}
+        assert len(ov_in["scenarios"]) == 7
+        assert len(ov_in["srlg_findings"]) >= 2
+
+        for in_scen, expected_rc in [
+            ("ncr_dnd_yamuna_fibre_cut", "PHYSICAL_FIBRE_CUT"),
+            ("cp_bank_srlg_cut", "PHYSICAL_FIBRE_CUT"),
+            ("okhla_dying_gasp_vs_cut", "COMMERCIAL_AC_POWER_OUTAGE"),
+            ("noida_dci_optical_degradation", "OPTICAL_SPLICE_DEGRADATION_TCA"),
+            ("ncr_ran_battery_lvd_countdown", "RAN_SITE_POWER_BATTERY_LVD"),
+            ("noida_eband_monsoon_rain_fade", "MICROWAVE_RAIN_FADE_ACM"),
+            ("india_subsea_cls_shunt_fault", "SUBSEA_PFE_SHUNT_FAULT"),
+        ]:
+            client.post(f"{COPILOT_URL}/api/v1/faults/reset")
+            r_in = client.post(
+                f"{COPILOT_URL}/api/v1/faults/trigger",
+                json={"scenario_id": in_scen},
+            )
+            assert r_in.status_code == 200, f"Failed scenario {in_scen}: {r_in.text}"
+            inc_in = r_in.json()["incident"]
+            assert inc_in["root_cause_type"] == expected_rc
+            if in_scen == "ncr_dnd_yamuna_fibre_cut":
+                assert inc_in["impact"]["currency"] == "INR"
+                assert inc_in["impact"]["total_sla_penalty_per_hour_aed"] == 450000
+                assert "INR 450,000/hr" in inc_in["ai_copilot"]["narrative_md"]
+
+        # 8. Switch cleanly back to UAE — Dubai Metro so subsequent tests start on UAE baseline
+        r_sw_ae = client.post(
+            f"{COPILOT_URL}/api/v1/region/switch",
+            json={"region_id": "uae_dubai"},
+        )
+        assert r_sw_ae.status_code == 200
+
+        # 9. Leave Scenario 1 active so UI opens with a rich multi-layer incident ready to inspect
         client.post(f"{COPILOT_URL}/api/v1/faults/reset")
         r1 = client.post(
             f"{COPILOT_URL}/api/v1/faults/trigger",

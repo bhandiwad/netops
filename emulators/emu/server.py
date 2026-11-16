@@ -43,6 +43,7 @@ from .roads import _interpolate_along_coords, build_or_load_osp_geometry  # noqa
 from .spec import (  # noqa: E402
     CABLES,
     CUSTOMERS,
+    DATASET,
     DUCTS,
     FAULT_SCENARIOS,
     GPON_SPLITTER_CLUSTERS,
@@ -58,6 +59,8 @@ from .spec import (  # noqa: E402
     SLA_TIERS,
     SUBSEA_SYSTEMS,
     WAVELENGTHS,
+    list_available_regions,
+    reload_dataset,
 )
 
 app = FastAPI(title="Multi-OEM Telco Emulator Suite", version="2.0.0")
@@ -119,6 +122,12 @@ def _now_iso() -> str:
 
 def _init_baseline_traces_and_pm() -> None:
     """Generate clean baseline .sor traces for all cables and healthy optical PM counters."""
+    GENERATED_SOR_TRACES.clear()
+    OTDR_MEASUREMENT_META.clear()
+    OPTICAL_PM_STATE.clear()
+    RAN_PM_STATE.clear()
+    SUBSEA_STATE.clear()
+
     cables_by_id = {c["id"]: c for c in OSP_DATA.get("cables", [])}
     rfts_by_cable: dict[str, dict[str, Any]] = {}
     for rtu in RFTS:
@@ -126,7 +135,7 @@ def _init_baseline_traces_and_pm() -> None:
             rfts_by_cable[cid] = rtu
 
     for cid, cinfo in cables_by_id.items():
-        rtu = rfts_by_cable.get(cid, {"id": "ONMSI-RTU-QZ", "vendor": "viavi", "pop": cinfo["path_nodes"][0]})
+        rtu = rfts_by_cable.get(cid, {"id": f"ONMSI-RTU-{cinfo['path_nodes'][0]}", "vendor": "viavi", "pop": cinfo["path_nodes"][0]})
         supplier = "VIAVI Solutions" if rtu["vendor"] == "viavi" else "EXFO Inc."
         unit = "ONMSi OTU-8000" if rtu["vendor"] == "viavi" else "Nova Fiber FG-750"
         splices = [
@@ -644,10 +653,20 @@ async def emulator_landing_page() -> str:
 </html>"""
 
 
+class DatasetSwitchRequest(BaseModel):
+    region_id: str
+
+
 @app.get("/emulator/status")
 async def get_emulator_status() -> dict[str, Any]:
     return {
         "status": "running",
+        "active_region": DATASET.get("dataset_id", "uae_dubai"),
+        "region_name": DATASET.get("dataset_name", "UAE — Dubai Metro"),
+        "currency": DATASET.get("currency", "AED"),
+        "map_center": DATASET.get("map_center", [55.245, 25.155]),
+        "map_zoom": DATASET.get("map_zoom", 10.9),
+        "available_regions": list_available_regions(),
         "active_faults": list(ACTIVE_FAULTS.values()),
         "active_alarm_count": len(ACTIVE_ALARMS),
         "jira_issue_count": len(JIRA_ISSUES),
@@ -655,6 +674,31 @@ async def get_emulator_status() -> dict[str, Any]:
         "servicenow_work_order_count": len(SERVICENOW_WORK_ORDERS),
         "scenarios": FAULT_SCENARIOS,
         "operator_profiles": OPERATOR_PROFILES,
+    }
+
+
+@app.post("/emulator/dataset/switch")
+async def switch_emulator_dataset(req: DatasetSwitchRequest) -> dict[str, Any]:
+    global OSP_DATA
+    try:
+        reload_dataset(region_id=req.region_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    ACTIVE_FAULTS.clear()
+    ACTIVE_ALARMS.clear()
+    REROUTED_WAVELENGTHS.clear()
+    JIRA_ISSUES.clear()
+    SERVICENOW_INCIDENTS.clear()
+    SERVICENOW_WORK_ORDERS.clear()
+
+    OSP_DATA = build_or_load_osp_geometry()
+    _init_baseline_traces_and_pm()
+    return {
+        "status": "switched",
+        "active_region": DATASET.get("dataset_id"),
+        "region_name": DATASET.get("dataset_name"),
+        "currency": DATASET.get("currency", "AED"),
     }
 
 
@@ -671,12 +715,13 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
         scen_id = scenario["id"]
     else:
         fault_type = req.fault_type or "fibre_cut"
-        target_id = req.target_id or "CBL-QZ-BB-01"
+        target_id = req.target_id or (CABLES[0]["id"] if CABLES else "CBL-01")
         cut_ratio = req.cut_ratio
         scen_id = f"custom_{fault_type}_{target_id}"
 
     new_alarms: list[dict[str, Any]] = []
     cables_by_id = {c["id"]: c for c in OSP_DATA["cables"]}
+    rfts_by_cable = {cid: rtu for rtu in RFTS for cid in rtu["monitors"]}
 
     if fault_type == "fibre_cut":
         new_alarms.extend(_synthesize_cable_cut_alarms(target_id, cut_ratio, scen_id))
@@ -689,7 +734,40 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
             new_alarms.extend(_synthesize_cable_cut_alarms(cid, cut_ratio, scen_id))
     elif fault_type == "power_outage":
         now = _now_iso()
-        # Generate GPON OLT dying-gasp alarms + clean OTDR continuity trace + smart-grid CPE power-off
+        spl = next(
+            (
+                g for g in GPON_SPLITTER_CLUSTERS
+                if (scenario and g["id"] == scenario.get("target_splitter"))
+                or g["feeder_cable"] == target_id
+            ),
+            GPON_SPLITTER_CLUSTERS[-1] if GPON_SPLITTER_CLUSTERS else {
+                "id": "SPL-01",
+                "olt_id": "OLT-01",
+                "pop": "POP",
+                "feeder_cable": target_id,
+                "ont_count": 24,
+                "district": "Industrial Zone",
+            },
+        )
+        feeder_cid = (scenario or {}).get("target_cable") or spl["feeder_cable"]
+        pop_id = spl["pop"]
+        ont_cnt = int(spl["ont_count"])
+        rtu_id = rfts_by_cable.get(feeder_cid, {"id": f"ONMSI-RTU-{pop_id}"})["id"]
+        opt_len = cables_by_id[feeder_cid]["optical_length_m"] if feeder_cid in cables_by_id else 2400.0
+
+        svc = next(
+            (
+                s for s in SERVICES
+                if (scenario and s["id"] == scenario.get("target_service"))
+                or any(leg.get("cable") == feeder_cid for leg in s["legs"])
+            ),
+            SERVICES[-1],
+        )
+        cust_node = (scenario or {}).get("target_node") or next(
+            (c["node"] for c in CUSTOMERS if c["id"] == svc["customer"]),
+            pop_id,
+        )
+
         new_alarms.extend([
             {
                 "alarm_id": f"ALM-{uuid.uuid4().hex[:8].upper()}",
@@ -697,17 +775,17 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "nmsworks_cygnet",
                 "protocol": "TR-069/G.984-PLOAM",
                 "layer": "gpon_access",
-                "resource_id": "SPL-QZ-IND-02",
-                "node_id": "QZ",
+                "resource_id": spl["id"],
+                "node_id": pop_id,
                 "severity": "MAJOR",
                 "specific_problem": "GPON_MASS_ONT_DYING_GASP",
-                "probable_cause": "Customer Premises Commercial AC Power Loss (24/24 ONTs sent Dying-Gasp bit)",
+                "probable_cause": f"Customer Premises Commercial AC Power Loss ({ont_cnt}/{ont_cnt} ONTs sent Dying-Gasp bit)",
                 "raw_text": (
-                    "[OLT-QZ-NK-01 / GenieACS] 24 of 24 ONTs on splitter SPL-QZ-IND-02 (cable CBL-QZ-AQI-01) "
-                    "transmitted G.984 PLOAM Dying-Gasp within 650ms prior to link loss. Optical feeder Rx healthy."
+                    f"[{spl['olt_id']} / GenieACS] {ont_cnt} of {ont_cnt} ONTs on splitter {spl['id']} (cable {feeder_cid}) "
+                    f"transmitted G.984 PLOAM Dying-Gasp within 650ms prior to link loss. Optical feeder Rx healthy."
                 ),
                 "raised_at": now,
-                "extra": {"cable_id": "CBL-QZ-AQI-01", "dying_gasp_count": 24, "losi_without_gasp": 0},
+                "extra": {"cable_id": feeder_cid, "dying_gasp_count": ont_cnt, "losi_without_gasp": 0},
             },
             {
                 "alarm_id": f"ALM-{uuid.uuid4().hex[:8].upper()}",
@@ -715,17 +793,17 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "viavi_onmsi",
                 "protocol": "RFTS-REST+SOR",
                 "layer": "fibre_osp",
-                "resource_id": "CBL-QZ-AQI-01",
-                "node_id": "QZ",
+                "resource_id": feeder_cid,
+                "node_id": pop_id,
                 "severity": "CLEARED",
                 "specific_problem": "OTDR_CONTINUITY_VERIFIED_NO_CUT",
                 "probable_cause": "On-demand 1625nm OTDR trace confirms intact fiber end-to-end (no break)",
                 "raw_text": (
-                    f"[ONMSI-RTU-QZ] Triggered 1625nm check on CBL-QZ-AQI-01: End-to-end continuity verified "
-                    f"({cables_by_id['CBL-QZ-AQI-01']['optical_length_m']} m, total loss 0.84 dB). Zero fiber fault."
+                    f"[{rtu_id}] Triggered 1625nm check on {feeder_cid}: End-to-end continuity verified "
+                    f"({opt_len} m, total loss 0.84 dB). Zero fiber fault."
                 ),
                 "raised_at": now,
-                "extra": {"cable_id": "CBL-QZ-AQI-01", "fiber_intact": True},
+                "extra": {"cable_id": feeder_cid, "fiber_intact": True},
             },
             {
                 "alarm_id": f"ALM-{uuid.uuid4().hex[:8].upper()}",
@@ -733,24 +811,40 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "nmsworks_cygnet",
                 "protocol": "NMSWorks-REST",
                 "layer": "enterprise_sla",
-                "resource_id": "SVC-AQI-DIA-01:primary",
-                "node_id": "C_AQI",
+                "resource_id": f"{svc['id']}:{svc['legs'][0]['name']}",
+                "node_id": cust_node,
                 "severity": "MAJOR",
                 "specific_problem": "CPE_POWER_DOWN_DYING_GASP",
-                "probable_cause": "Premises AC Mains Outage at Al Quoz Industrial Smart-Grid Hub",
+                "probable_cause": f"Premises AC Mains Outage at {spl['district']}",
                 "raw_text": (
-                    "[NMSWorks CygNet] CPE-C_AQI-01 reported SNMP sysUpTime power-fail trap & 802.3ah OAM Dying Gasp "
-                    "on SVC-AQI-DIA-01 (Customer CUST-1008)"
+                    f"[NMSWorks CygNet] CPE-{cust_node}-01 reported SNMP sysUpTime power-fail trap & 802.3ah OAM Dying Gasp "
+                    f"on {svc['id']} (Customer {svc['customer']})"
                 ),
                 "raised_at": now,
-                "extra": {"service_id": "SVC-AQI-DIA-01", "customer_id": "CUST-1008", "dying_gasp": True},
+                "extra": {"service_id": svc["id"], "customer_id": svc["customer"], "dying_gasp": True},
             },
         ])
     elif fault_type == "optical_degradation":
         now = _now_iso()
-        cinfo = cables_by_id["CBL-AIR-DSO-01"]
+        deg_cable_id = (scenario or {}).get("target_cable") or target_id
+        cinfo = cables_by_id[deg_cable_id]
         _, optical_deg_m, _, _ = _optical_cut_distance_for_cable(cinfo, cut_ratio)
-        OPTICAL_PM_STATE["OCH-SODC-AIR"].update({
+
+        och_obj = next(
+            (
+                w for w in WAVELENGTHS
+                if (scenario and w["id"] == scenario.get("target_och"))
+                or (w.get("service") and set(cinfo["path_nodes"][:1] + cinfo["path_nodes"][-1:]).issubset(set(w["path"])))
+            ),
+            WAVELENGTHS[-1],
+        )
+        och_id = och_obj["id"]
+        svc_id = (scenario or {}).get("target_service") or och_obj.get("service")
+        launch_pop = cinfo["path_nodes"][0]
+        head_pop = och_obj["path"][0]
+        rtu_id = rfts_by_cable.get(deg_cable_id, {"id": f"NOVA-RTU-{launch_pop}"})["id"]
+
+        OPTICAL_PM_STATE[och_id].update({
             "osnr_db": 14.2,
             "pre_fec_ber": 8.4e-4,
             "rx_power_dbm": -16.9,
@@ -764,21 +858,21 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "nokia_nsp",
                 "protocol": "OpenConfig-gNMI",
                 "layer": "dwdm_optical",
-                "resource_id": "OCH-SODC-AIR",
-                "node_id": "DSO",
+                "resource_id": och_id,
+                "node_id": head_pop,
                 "severity": "MAJOR",
                 "specific_problem": "OPTICAL_PRE_FEC_BER_TCA_BREACH",
                 "probable_cause": "High-Loss Bend / Pinched Splice Degrading OSNR Before Hard Failure",
                 "raw_text": (
-                    "[Nokia NSP 1830 PSS] OCh OCH-SODC-AIR (100G 193.70THz DSO<->AIR): 15-min TCA crossed — "
-                    "Pre-FEC BER degraded from 1.2e-6 to 8.4e-4 (FEC uncorrectable margin < 1.1 dB), OSNR dropped "
-                    "to 14.2 dB, span RxPower -16.9 dBm on CBL-AIR-DSO-01."
+                    f"[Nokia NSP 1830 PSS] OCh {och_id} ({och_obj['rate']} {och_obj['freq']:.2f}THz "
+                    f"{'<->'.join(och_obj['path'])}): 15-min TCA crossed — Pre-FEC BER degraded from 1.2e-6 to 8.4e-4 "
+                    f"(FEC uncorrectable margin < 1.1 dB), OSNR dropped to 14.2 dB, span RxPower -16.9 dBm on {deg_cable_id}."
                 ),
                 "raised_at": now,
                 "extra": {
-                    "cable_id": "CBL-AIR-DSO-01",
-                    "och_id": "OCH-SODC-AIR",
-                    "service_id": "SVC-SODC-DCI-100G",
+                    "cable_id": deg_cable_id,
+                    "och_id": och_id,
+                    "service_id": svc_id,
                     "pre_fec_ber": 8.4e-4,
                     "osnr_db": 14.2,
                     "optical_event_distance_m": optical_deg_m,
@@ -790,26 +884,37 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "exfo_nova",
                 "protocol": "RFTS-REST+SOR",
                 "layer": "fibre_osp",
-                "resource_id": "CBL-AIR-DSO-01",
-                "node_id": "AIR",
+                "resource_id": deg_cable_id,
+                "node_id": launch_pop,
                 "severity": "WARNING",
                 "specific_problem": "OTDR_NON_REFLECTIVE_HIGH_SPLICE_LOSS",
                 "probable_cause": f"4.8 dB macro-bend / splice attenuation anomaly at {optical_deg_m:.1f} m",
                 "raw_text": (
-                    f"[NOVA-RTU-AIR] EXFO Nova OTDR comparison on CBL-AIR-DSO-01 detected +4.8 dB non-reflective "
-                    f"macro-bend loss step at optical distance {optical_deg_m:.1f} m from AIR POP."
+                    f"[{rtu_id}] EXFO Nova OTDR comparison on {deg_cable_id} detected +4.8 dB non-reflective "
+                    f"macro-bend loss step at optical distance {optical_deg_m:.1f} m from {launch_pop} POP."
                 ),
                 "raised_at": now,
                 "extra": {
-                    "cable_id": "CBL-AIR-DSO-01",
-                    "launch_node": "AIR",
+                    "cable_id": deg_cable_id,
+                    "launch_node": launch_pop,
                     "optical_distance_m": optical_deg_m,
                 },
             },
         ])
     elif fault_type == "ran_battery_lvd":
         now = _now_iso()
-        RAN_PM_STATE["RAN_BB_HUB"].update({
+        hub = next(
+            (s for s in RAN_SITES if s["id"] == target_id or s.get("downstream_tails")),
+            RAN_SITES[0],
+        )
+        hub_id = hub["id"]
+        pop_anchor = hub["pop_anchor"]
+        tails = hub.get("downstream_tails", [])
+        bh_cable = hub.get("backhaul_cable") or CABLES[0]["id"]
+        bh_launch = cables_by_id[bh_cable]["path_nodes"][0] if bh_cable in cables_by_id else pop_anchor
+        rtu_id = rfts_by_cable.get(bh_cable, {"id": f"ONMSI-RTU-{bh_launch}"})["id"]
+
+        RAN_PM_STATE[hub_id].update({
             "operational_state": "ON_BATTERY_CRITICAL_LVD_RISK",
             "ac_mains_status": "FAILED",
             "dc_bus_voltage_v": 44.1,
@@ -819,7 +924,7 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
         })
         _send_udp_snmp_trap({
             "enterprise_oid": "1.3.6.1.4.1.193.183.4.1",
-            "agent": "RAN_BB_HUB",
+            "agent": hub_id,
             "specific_trap": "cePowerRectifierAcMainsFail",
             "dcVoltageV": 44.1,
             "lvdThresholdV": 43.2,
@@ -832,24 +937,24 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "ericsson_enm",
                 "protocol": "3GPP-TS28.532+SNMP",
                 "layer": "mobile_ran",
-                "resource_id": "RAN_BB_HUB",
-                "node_id": "BB",
+                "resource_id": hub_id,
+                "node_id": pop_anchor,
                 "severity": "CRITICAL",
                 "specific_problem": "RAN_RECTIFIER_AC_MAINS_FAIL_LVD_COUNTDOWN",
                 "probable_cause": "Commercial 3-Phase AC Mains Loss; DC Bus Discharging on VRLA Battery (44.1V -> LVD at 43.2V, 36 mins left)",
                 "raw_text": (
-                    "[Ericsson ENM / Enclosure Power] gNB-BB-01 (RAN_BB_HUB): Rectifier AC Mains Fail. "
-                    "Site running on VRLA battery bank: Vdc = 44.1V (LVD trip at 43.2V, est. 36 mins remaining). "
-                    "Downstream daisy-chained tail sites gNB-BB-02 (RAN_BB_T1) & gNB-BB-03 (RAN_BB_T2) will lose CSR backhaul if LVD trips!"
+                    f"[Ericsson ENM / Enclosure Power] {hub['name']} ({hub_id}): Rectifier AC Mains Fail. "
+                    f"Site running on VRLA battery bank: Vdc = 44.1V (LVD trip at 43.2V, est. 36 mins remaining). "
+                    f"Downstream daisy-chained tail sites {', '.join(tails)} will lose CSR backhaul if LVD trips!"
                 ),
                 "raised_at": now,
                 "extra": {
-                    "site_id": "RAN_BB_HUB",
+                    "site_id": hub_id,
                     "dc_bus_voltage_v": 44.1,
                     "lvd_threshold_v": 43.2,
                     "battery_remaining_mins": 36,
-                    "cells": ["CELL-BB01-N78-S1", "CELL-BB01-N78-S2", "CELL-BB01-N78-S3", "CELL-BB01-B3-S1"],
-                    "cascaded_tail_sites": ["RAN_BB_T1", "RAN_BB_T2"],
+                    "cells": hub["cells"],
+                    "cascaded_tail_sites": tails,
                 },
             },
             {
@@ -858,16 +963,16 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "ericsson_enm",
                 "protocol": "3GPP-TS32.435-PM",
                 "layer": "mobile_ran",
-                "resource_id": "RAN_BB_HUB",
-                "node_id": "BB",
+                "resource_id": hub_id,
+                "node_id": pop_anchor,
                 "severity": "MAJOR",
                 "specific_problem": "RAN_ENCLOSURE_HIGH_TEMP_HVAC_OFF",
                 "probable_cause": "Outdoor cabinet HVAC shed on AC loss; internal temp 44.8°C (+1.4°C/10min)",
                 "raw_text": (
-                    "[Ericsson ENM] gNB-BB-01 Baseband 6648 thermal sensor 44.8°C (HVAC load-shed active on battery)."
+                    f"[Ericsson ENM] {hub['name']} Baseband 6648 thermal sensor 44.8°C (HVAC load-shed active on battery)."
                 ),
                 "raised_at": now,
-                "extra": {"site_id": "RAN_BB_HUB", "cabinet_temp_c": 44.8, "cells": []},
+                "extra": {"site_id": hub_id, "cabinet_temp_c": 44.8, "cells": []},
             },
             {
                 "alarm_id": f"ALM-{uuid.uuid4().hex[:8].upper()}",
@@ -875,19 +980,27 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "viavi_onmsi",
                 "protocol": "RFTS-REST+SOR",
                 "layer": "fibre_osp",
-                "resource_id": "CBL-BB-RANHUB-01",
-                "node_id": "QZ",
+                "resource_id": bh_cable,
+                "node_id": bh_launch,
                 "severity": "CLEARED",
                 "specific_problem": "OTDR_CONTINUITY_VERIFIED_NO_CUT",
-                "probable_cause": "Backhaul fiber CBL-BB-RANHUB-01 optical continuity 100% healthy",
-                "raw_text": "[ONMSI-RTU-QZ] Backhaul fiber CBL-BB-RANHUB-01 optical path healthy (no fiber break).",
+                "probable_cause": f"Backhaul fiber {bh_cable} optical continuity 100% healthy",
+                "raw_text": f"[{rtu_id}] Backhaul fiber {bh_cable} optical path healthy (no fiber break).",
                 "raised_at": now,
-                "extra": {"cable_id": "CBL-BB-RANHUB-01", "fiber_intact": True},
+                "extra": {"cable_id": bh_cable, "fiber_intact": True},
             },
         ])
     elif fault_type == "microwave_rain_fade":
         now = _now_iso()
-        RAN_PM_STATE["RAN_DSO_MW1"].update({
+        mw_site = next(
+            (s for s in RAN_SITES if s["id"] == target_id or s["backhaul_type"] == "microwave_eband"),
+            RAN_SITES[-1],
+        )
+        mw_site_id = mw_site["id"]
+        pop_anchor = mw_site["pop_anchor"]
+        mw_link_id = mw_site.get("mw_link_id") or f"MW-{pop_anchor}-80G"
+
+        RAN_PM_STATE[mw_site_id].update({
             "operational_state": "DEGRADED_ACM_WEATHER_FADE",
             "mw_rsl_dbm": -69.4,
             "mw_snr_db": 9.2,
@@ -904,26 +1017,26 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "nokia_nsp",
                 "protocol": "NETCONF/Wavence-PM",
                 "layer": "mobile_ran",
-                "resource_id": "RAN_DSO_MW1",
-                "node_id": "DSO",
+                "resource_id": mw_site_id,
+                "node_id": pop_anchor,
                 "severity": "MAJOR",
                 "specific_problem": "MW_EBAND_RSL_DEEP_FADE_ACM_QPSK",
                 "probable_cause": "80GHz E-Band Atmospheric Rain Attenuation (42 mm/hr squall); RSL dropped 31.2 dB (-38.2 -> -69.4 dBm)",
                 "raw_text": (
-                    "[Nokia Wavence UBT-m 80GHz] Link MW-DSO-ACAD-80G (DSO <-> gNB-DSO-04): RSL -69.4 dBm, SNR 9.2 dB. "
-                    "Adaptive Coding & Modulation (ACM) downshifted 1024QAM (10 Gbps) -> QPSK (650 Mbps). "
-                    "Transceiver TX power normal (+18.0 dBm); adjacent 80GHz hops in DSO sector report correlated rain attenuation."
+                    f"[Nokia Wavence UBT-m 80GHz] Link {mw_link_id} ({pop_anchor} <-> {mw_site['name']}): RSL -69.4 dBm, SNR 9.2 dB. "
+                    f"Adaptive Coding & Modulation (ACM) downshifted 1024QAM (10 Gbps) -> QPSK (650 Mbps). "
+                    f"Transceiver TX power normal (+18.0 dBm); adjacent 80GHz hops in {pop_anchor} sector report correlated rain attenuation."
                 ),
                 "raised_at": now,
                 "extra": {
-                    "site_id": "RAN_DSO_MW1",
-                    "mw_link_id": "MW-DSO-ACAD-80G",
+                    "site_id": mw_site_id,
+                    "mw_link_id": mw_link_id,
                     "rsl_dbm": -69.4,
                     "snr_db": 9.2,
                     "acm_state": "QPSK",
                     "rain_rate_mm_hr": 42.0,
                     "hardware_healthy": True,
-                    "cells": ["CELL-DSO04-N78-S1", "CELL-DSO04-B3-S1"],
+                    "cells": mw_site["cells"],
                 },
             },
             {
@@ -932,22 +1045,38 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "nmsworks_cygnet",
                 "protocol": "CygNet-SIA",
                 "layer": "ip_mpls",
-                "resource_id": "CSR-DSO-MW1:eth0",
-                "node_id": "DSO",
+                "resource_id": f"CSR-{mw_site_id}:eth0",
+                "node_id": pop_anchor,
                 "severity": "WARNING",
                 "specific_problem": "BACKHAUL_QOS_BE_QUEUE_TAIL_DROP",
                 "probable_cause": "Best-Effort queue congestion due to temporary microwave ACM bandwidth compression; VoNR/Control-Plane EF queue 0% loss",
                 "raw_text": (
-                    "[NMSWorks CygNet] Cell-site router CSR-DSO-MW1: Best-Effort queue tail-drop during E-band ACM QPSK profile; "
-                    "5G VoNR & 3GPP F1-C control plane protected via DiffServ EF."
+                    f"[NMSWorks CygNet] Cell-site router CSR-{mw_site_id}: Best-Effort queue tail-drop during E-band ACM QPSK profile; "
+                    f"5G VoNR & 3GPP F1-C control plane protected via DiffServ EF."
                 ),
                 "raised_at": now,
-                "extra": {"site_id": "RAN_DSO_MW1"},
+                "extra": {"site_id": mw_site_id},
             },
         ])
     elif fault_type == "subsea_shunt":
         now = _now_iso()
-        SUBSEA_STATE["SUBSEA-FALCON-JBL-MUM"].update({
+        sub = next(
+            (s for s in SUBSEA_SYSTEMS if scenario and s["id"] == scenario.get("target_subsea")),
+            SUBSEA_SYSTEMS[0],
+        )
+        sub_id = sub["id"]
+        cls_node = sub["cls_node"]
+        cls_name = NODES.get(cls_node, {}).get("name", f"{cls_node} CLS")
+        pfe_id = sub["pfe_id"]
+        svc_id = (scenario or {}).get("target_service") or (sub.get("carried_services") or [SERVICES[0]["id"]])[0]
+        svc_obj = next((s for s in SERVICES if s["id"] == svc_id), SERVICES[0])
+        cust_obj = next((c for c in CUSTOMERS if c["id"] == svc_obj["customer"]), CUSTOMERS[0])
+        och_id = (scenario or {}).get("target_och") or next(
+            (leg["och"] for leg in svc_obj["legs"] if leg.get("och")),
+            WAVELENGTHS[0]["id"],
+        )
+
+        SUBSEA_STATE[sub_id].update({
             "operational_state": "SHUNT_FAULT_SINGLE_END_FEED_REQUIRED",
             "pfe_voltage_v": 2890.0,
             "pfe_current_ma": 950.0,
@@ -958,12 +1087,13 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
             "water_depth_m": 68,
             "updated_at": now,
         })
-        OPTICAL_PM_STATE["OCH-JLC-W"].update({
-            "osnr_db": 16.8,
-            "pre_fec_ber": 3.9e-4,
-            "operational_state": "SUBSEA_SHUNT_RISK",
-            "updated_at": now,
-        })
+        if och_id in OPTICAL_PM_STATE:
+            OPTICAL_PM_STATE[och_id].update({
+                "osnr_db": 16.8,
+                "pre_fec_ber": 3.9e-4,
+                "operational_state": "SUBSEA_SHUNT_RISK",
+                "updated_at": now,
+            })
         new_alarms.extend([
             {
                 "alarm_id": f"ALM-{uuid.uuid4().hex[:8].upper()}",
@@ -971,28 +1101,28 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "ciena_mcp",
                 "protocol": "Subsea-PFE+COTDR",
                 "layer": "dwdm_optical",
-                "resource_id": "OCH-JLC-W",
-                "node_id": "JBL",
+                "resource_id": och_id,
+                "node_id": cls_node,
                 "severity": "CRITICAL",
                 "specific_problem": "SUBSEA_PFE_SHUNT_FAULT_REPEATER_SPAN",
-                "probable_cause": "Wet-plant insulation shunt fault on SUBSEA-FALCON-JBL-MUM at 412.6 km from Jebel Ali CLS (Span R07-R08)",
+                "probable_cause": f"Wet-plant insulation shunt fault on {sub_id} at 412.6 km from {cls_name} (Span R07-R08)",
                 "raw_text": (
-                    "[Jebel Ali CLS PFE-JBL-01 & Ciena WaveLogic 5e] Subsea cable SUBSEA-FALCON-JBL-MUM: PFE output voltage "
-                    "dropped from +4,120V to +2,890V at 950mA constant current (earth leakage 318.5mA). Coherent OTDR (C-OTDR) "
-                    "pinpoints insulation shunt fault 412.6 km from Jebel Ali CLS (14.2 km past Repeater R07, depth 68m). "
-                    "Optical pump current on R07/R08 degraded (-2.4 dB gain tilt on OCH-JLC-W)."
+                    f"[{cls_name} {pfe_id} & Ciena WaveLogic 5e] Subsea cable {sub_id}: PFE output voltage "
+                    f"dropped from +4,120V to +2,890V at 950mA constant current (earth leakage 318.5mA). Coherent OTDR (C-OTDR) "
+                    f"pinpoints insulation shunt fault 412.6 km from {cls_name} (14.2 km past Repeater R07, depth 68m). "
+                    f"Optical pump current on R07/R08 degraded (-2.4 dB gain tilt on {och_id})."
                 ),
                 "raised_at": now,
                 "extra": {
-                    "subsea_cable_id": "SUBSEA-FALCON-JBL-MUM",
-                    "cls_node": "JBL",
-                    "pfe_id": "PFE-JBL-01",
+                    "subsea_cable_id": sub_id,
+                    "cls_node": cls_node,
+                    "pfe_id": pfe_id,
                     "pfe_voltage_v": 2890.0,
                     "cotdr_shunt_distance_km": 412.6,
                     "fault_span": "Repeater Span R07 -> R08 (14.2 km past R07)",
                     "water_depth_m": 68,
-                    "service_id": "SVC-JLC-WAVE-100G",
-                    "och_id": "OCH-JLC-W",
+                    "service_id": svc_id,
+                    "och_id": och_id,
                 },
             },
             {
@@ -1001,17 +1131,17 @@ async def inject_fault(req: FaultInjectRequest) -> dict[str, Any]:
                 "source_oem": "nmsworks_cygnet",
                 "protocol": "TMF642",
                 "layer": "enterprise_sla",
-                "resource_id": "SVC-JLC-WAVE-100G:working",
-                "node_id": "C_JLC",
+                "resource_id": f"{svc_id}:{svc_obj['legs'][0]['name']}",
+                "node_id": cust_obj["node"],
                 "severity": "MAJOR",
                 "specific_problem": "WHOLESALE_DCI_SUBSEA_PROTECTION_ALERT",
-                "probable_cause": "Subsea wet-plant shunt fault threatening Jebel Ali Logistics Cloud 100G DCI wave",
+                "probable_cause": f"Subsea wet-plant shunt fault threatening {cust_obj['name']} 100G DCI wave",
                 "raw_text": (
-                    "[NMSWorks CygNet] Wholesale 100G DCI service SVC-JLC-WAVE-100G on subsea feeder SUBSEA-FALCON-JBL-MUM "
-                    "requires PFE polarity rebalance & protection switch."
+                    f"[NMSWorks CygNet] Wholesale 100G DCI service {svc_id} on subsea feeder {sub_id} "
+                    f"requires PFE polarity rebalance & protection switch."
                 ),
                 "raised_at": now,
-                "extra": {"service_id": "SVC-JLC-WAVE-100G", "customer_id": "CUST-1004"},
+                "extra": {"service_id": svc_id, "customer_id": cust_obj["id"]},
             },
         ])
 
@@ -1311,11 +1441,12 @@ async def ericsson_3gpp_pm_xml() -> Response:
       </measValue>
     </measInfo>"""
         )
+    subnetwork_dn = DATASET.get("dataset_id", "Metro_5G").upper()
     xml_doc = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<measCollecFile xmlns="http://www.3gpp.org/ftp/specs/archive/32_series/32.435#measCollec">\n'
         f'  <fileHeader fileFormatVersion="32.435 V17.0" vendorName="Ericsson ENM / Nokia NSP">\n'
-        f'    <fileSender localDn="SubNetwork=UAE_Metro_5G"/>\n'
+        f'    <fileSender localDn="SubNetwork={subnetwork_dn}"/>\n'
         f'    <measCollec beginTime="{now}"/>\n'
         '  </fileHeader>\n'
         '  <measData>\n'
@@ -1346,6 +1477,7 @@ async def genieacs_gpon_devices() -> dict[str, Any]:
 async def comviva_customers() -> dict[str, Any]:
     return {
         "bss": "Comviva BlueMarble / Ngage BSS",
+        "currency": DATASET.get("currency", "AED"),
         "customers": CUSTOMERS,
         "sla_tiers": SLA_TIERS,
         "services": SERVICES,

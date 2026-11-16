@@ -105,6 +105,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 }) => {
   const totalAlarms = overview.alarms?.length || 0;
   const hourlySlaRisk = activeIncident?.impact?.total_sla_penalty_per_hour_aed || 0;
+  const currency =
+    activeIncident?.impact?.currency ||
+    (activeProfile as OperatorProfile)?.currency ||
+    overview.currency ||
+    'AED';
 
   return (
     <div className="space-y-4">
@@ -180,7 +185,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   : 'text-slate-700 dark:text-slate-300'
               }`}
             >
-              AED {hourlySlaRisk.toLocaleString()}/hr
+              {currency} {hourlySlaRisk.toLocaleString()}/hr
             </span>
           </div>
 
@@ -244,6 +249,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               <div className="space-y-3">
                 <div className="h-[540px] w-full">
                   <OspMap
+                    regionId={overview.active_region}
+                    mapCenter={overview.map_center}
+                    mapZoom={overview.map_zoom}
                     gis={overview.gis || { ducts: [], manholes: [], cables: [] }}
                     topology={overview.topology || {}}
                     activeIncident={activeIncident}
@@ -573,7 +581,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   </h3>
                   {hourlySlaRisk > 0 && (
                     <span className="font-mono text-rose-600 dark:text-rose-400 font-medium">
-                      AED {hourlySlaRisk.toLocaleString()}/hr
+                      {currency} {hourlySlaRisk.toLocaleString()}/hr
                     </span>
                   )}
                 </div>
@@ -620,7 +628,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                             {svc.outage_state === 'COMPLETE_OUTAGE' ? 'Outage' : 'Single-leg'}
                           </span>
                           <div className="font-mono text-[11px] text-slate-500 mt-0.5">
-                            AED {svc.penalty_per_hour_aed.toLocaleString()}/hr
+                            {currency} {svc.penalty_per_hour_aed.toLocaleString()}/hr
                           </div>
                         </div>
                       </div>

@@ -1,10 +1,11 @@
 import React from 'react';
 import { BatteryCharging, CloudRain, FileCode2, Waves } from 'lucide-react';
-import type { RanSitePm, SubseaSystem } from '../types/api';
+import type { FaultScenario, RanSitePm, SubseaSystem } from '../types/api';
 
 interface TelemetryViewProps {
   ranSitesPm: RanSitePm[];
   subseaSystems: SubseaSystem[];
+  scenarios: FaultScenario[];
   xmlPreview: string | null;
   onTriggerScenario: (scenarioId: string) => void;
   onToggle3gppXml: () => void;
@@ -13,10 +14,13 @@ interface TelemetryViewProps {
 export const TelemetryView: React.FC<TelemetryViewProps> = ({
   ranSitesPm,
   subseaSystems,
+  scenarios,
   xmlPreview,
   onTriggerScenario,
   onToggle3gppXml,
 }) => {
+  const findScenarioId = (faultType: string, fallback: string): string =>
+    scenarios.find((s) => s.fault_type === faultType)?.id || fallback;
   return (
     <div className="space-y-5">
       {/* 5G Sites, Power & Microwave */}
@@ -32,13 +36,17 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => onTriggerScenario('ran_site_battery_lvd_countdown')}
+              onClick={() =>
+                onTriggerScenario(findScenarioId('ran_battery_lvd', 'ran_site_battery_lvd_countdown'))
+              }
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition"
             >
               <BatteryCharging className="w-3.5 h-3.5 text-amber-500" /> Test Battery Drain
             </button>
             <button
-              onClick={() => onTriggerScenario('eband_microwave_rain_fade')}
+              onClick={() =>
+                onTriggerScenario(findScenarioId('microwave_rain_fade', 'eband_microwave_rain_fade'))
+              }
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition"
             >
               <CloudRain className="w-3.5 h-3.5 text-sky-500" /> Test Rain Fade
@@ -154,7 +162,9 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
             </p>
           </div>
           <button
-            onClick={() => onTriggerScenario('pccw_subsea_shunt_fault')}
+            onClick={() =>
+              onTriggerScenario(findScenarioId('subsea_shunt', 'subsea_shunt_fault'))
+            }
             className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition"
           >
             <Waves className="w-3.5 h-3.5 text-indigo-500" /> Test Subsea Fault

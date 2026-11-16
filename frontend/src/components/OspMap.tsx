@@ -3,6 +3,9 @@ import maplibregl from 'maplibre-gl';
 import { Crosshair, X } from 'lucide-react';
 
 interface OspMapProps {
+  regionId?: string;
+  mapCenter?: [number, number];
+  mapZoom?: number;
   gis: {
     ducts: any[];
     manholes: any[];
@@ -19,6 +22,9 @@ interface OspMapProps {
 }
 
 export const OspMap: React.FC<OspMapProps> = ({
+  regionId = 'uae_dubai',
+  mapCenter = [55.245, 25.155],
+  mapZoom = 10.9,
   gis,
   topology,
   activeIncident,
@@ -118,8 +124,8 @@ export const OspMap: React.FC<OspMapProps> = ({
           },
         ],
       },
-      center: [55.245, 25.155],
-      zoom: 10.9,
+      center: mapCenter,
+      zoom: mapZoom,
       pitch: 12,
     });
     } catch (err) {
@@ -136,6 +142,12 @@ export const OspMap: React.FC<OspMapProps> = ({
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.jumpTo({ center: mapCenter, zoom: mapZoom });
+  }, [regionId, mapCenter[0], mapCenter[1], mapZoom]);
 
   useEffect(() => {
     const map = mapRef.current;

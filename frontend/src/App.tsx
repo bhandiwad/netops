@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   GitBranch,
+  Globe,
   Layers,
   Moon,
   PlugZap,
@@ -13,6 +14,7 @@ import { nocApi } from './api/client';
 import { ConnectorEditorModal, LlmSettingsModal } from './components/ConfigModals';
 import type {
   Connector,
+  OperatorProfile,
   OtdrTraceData,
   OverviewResponse,
   PrimaryNavId,
@@ -37,7 +39,7 @@ export const App: React.FC = () => {
   const [primaryNav, setPrimaryNav] = useState<PrimaryNavId>('workspace');
   const [stageTab, setStageTab] = useState<StageTabId>('map');
 
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('du_converged');
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('uae_converged');
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('szr_canal_fibre_cut');
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [selectedCableId, setSelectedCableId] = useState<string | null>(null);
@@ -88,8 +90,47 @@ export const App: React.FC = () => {
     incidents.find((i) => i.incident_id === selectedIncidentId) || incidents[0] || null;
 
   const profiles = overview?.operator_profiles || {};
-  const activeProfile = profiles[selectedProfileId] || Object.values(profiles)[0] || {};
-  const scenarios = overview?.scenarios || [];
+  const activeProfile: OperatorProfile | undefined =
+    profiles[selectedProfileId] || Object.values(profiles)[0];
+  const allScenarios = overview?.scenarios || [];
+  const profileFiltered = allScenarios.filter(
+    (s) => !s.operators?.length || !activeProfile?.id || s.operators.includes(activeProfile.id)
+  );
+  const scenarios = profileFiltered.length > 0 ? profileFiltered : allScenarios;
+  const availableRegions = overview?.available_regions || [
+    { region_id: 'uae_dubai', label: 'UAE — Dubai Metro', short_label: 'UAE · Dubai', currency: 'AED' },
+    { region_id: 'india_ncr', label: 'India — Delhi NCR', short_label: 'India · Delhi NCR', currency: 'INR' },
+  ];
+  const activeRegionId = overview?.active_region || 'uae_dubai';
+
+  useEffect(() => {
+    const profileIds = Object.keys(profiles);
+    if (profileIds.length > 0 && !profiles[selectedProfileId]) {
+      setSelectedProfileId(profileIds[0]);
+    }
+  }, [overview?.active_region, Object.keys(profiles).join(',')]);
+
+  useEffect(() => {
+    if (scenarios.length > 0 && !scenarios.some((s) => s.id === selectedScenarioId)) {
+      setSelectedScenarioId(scenarios[0].id);
+    }
+  }, [scenarios.map((s) => s.id).join(',')]);
+
+  const handleSwitchRegion = async (regionId: string) => {
+    if (regionId === activeRegionId) return;
+    setBusyAction('Switching region...');
+    try {
+      await nocApi.switchRegion(regionId);
+      setSelectedIncidentId(null);
+      setInspectedOtdr(null);
+      setSelectedCableId(null);
+      setXmlPreview(null);
+      setBenchmarkResult(null);
+      await refreshOverview();
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const handleTriggerScenario = async (scenarioId?: string) => {
     const sid = scenarioId || selectedScenarioId;
@@ -311,8 +352,29 @@ export const App: React.FC = () => {
               </span>
             )}
 
+            <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-[#111622] border border-slate-200/70 dark:border-slate-800 rounded-lg px-2 py-1">
+              <Globe className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+              <select
+                value={activeRegionId}
+                onChange={(e) => handleSwitchRegion(e.target.value)}
+                disabled={!!busyAction}
+                aria-label="Network region"
+                className="bg-transparent text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+              >
+                {availableRegions.map((reg) => (
+                  <option
+                    key={reg.region_id}
+                    value={reg.region_id}
+                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                  >
+                    {reg.short_label} ({reg.currency})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <select
-              value={selectedProfileId}
+              value={activeProfile?.id || selectedProfileId}
               onChange={(e) => setSelectedProfileId(e.target.value)}
               aria-label="Operator profile"
               className="bg-slate-100/90 dark:bg-[#111622] border border-slate-200/70 dark:border-slate-800 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
@@ -358,7 +420,7 @@ export const App: React.FC = () => {
             incidents={incidents}
             activeIncident={activeIncident}
             onSelectIncidentId={setSelectedIncidentId}
-            activeProfile={activeProfile}
+            activeProfile={activeProfile || {}}
             scenarios={scenarios}
             selectedScenarioId={selectedScenarioId}
             onSelectScenarioId={setSelectedScenarioId}
@@ -398,6 +460,7 @@ export const App: React.FC = () => {
           <TelemetryView
             ranSitesPm={ranSitesPm}
             subseaSystems={subseaSystems}
+            scenarios={allScenarios}
             xmlPreview={xmlPreview}
             onTriggerScenario={(sid) => handleTriggerScenario(sid)}
             onToggle3gppXml={handleToggle3gppXml}

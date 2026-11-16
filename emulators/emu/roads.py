@@ -77,14 +77,25 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
     """Return complete OSP GIS dataset: ducts, manholes, and cables with splice/slack profiles."""
     fp = _topology_fingerprint()
     existing_duct_coords: dict[str, list[list[float]]] = {}
+    regions_cache: dict[str, Any] = {}
     if CACHE_PATH.exists():
         try:
             cached = json.loads(CACHE_PATH.read_text())
-            if cached.get("fingerprint") == fp:
-                return cached
-            for cd in cached.get("ducts", []):
-                if cd.get("id") and cd.get("coordinates"):
-                    existing_duct_coords[cd["id"]] = cd["coordinates"]
+            if isinstance(cached.get("regions"), dict):
+                regions_cache = cached["regions"]
+                if fp in regions_cache:
+                    return regions_cache[fp]
+                for reg_data in regions_cache.values():
+                    for cd in reg_data.get("ducts", []):
+                        if cd.get("id") and cd.get("coordinates"):
+                            existing_duct_coords[cd["id"]] = cd["coordinates"]
+            elif cached.get("fingerprint"):
+                regions_cache[cached["fingerprint"]] = cached
+                if cached.get("fingerprint") == fp:
+                    return cached
+                for cd in cached.get("ducts", []):
+                    if cd.get("id") and cd.get("coordinates"):
+                        existing_duct_coords[cd["id"]] = cd["coordinates"]
         except Exception:
             pass
 
@@ -240,8 +251,9 @@ def build_or_load_osp_geometry() -> dict[str, Any]:
         "manholes": manholes,
         "cables": cables_out,
     }
+    regions_cache[fp] = result
     try:
-        CACHE_PATH.write_text(json.dumps(result, indent=2))
+        CACHE_PATH.write_text(json.dumps({"regions": regions_cache}, indent=2))
     except Exception:
         pass
     return result

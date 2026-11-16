@@ -24,13 +24,13 @@ BACKEND_DIR = ROOT / "backend" / "app"
 FORBIDDEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Hardcoded OSP Cable ID", re.compile(r"\bCBL-[A-Z0-9-]+\b")),
     ("Hardcoded Optical Wavelength ID", re.compile(r"\bOCH-[A-Z0-9-]+\b")),
-    ("Hardcoded OSP Duct ID", re.compile(r"\bD-(?:JBL|I[1-5]|DG|TC|AK|KRM|MB|DRA|AIR|GB|DSO|RAK|BRS|MRN|QZ)[A-Z0-9-]*\b")),
-    ("Hardcoded RAN Site ID", re.compile(r"\bRAN_(?:BB|MRN|DSO)[A-Z0-9_]*\b")),
+    ("Hardcoded OSP Duct ID", re.compile(r"\bD-(?:JBL|I[1-5]|DG|TC|AK|KRM|MB|DRA|AIR|GB|DSO|RAK|BRS|MRN|QZ|GGN|NH48|AERO|DHAULA|AIIMS|CP|NP|KG|ITO|VIKAS|DNDW|DNDE|NOI|GNOI|NEXP)[A-Z0-9-]*\b")),
+    ("Hardcoded RAN Site ID", re.compile(r"\bRAN_(?:BB|MRN|DSO|NOI|GGN|EXP)[A-Z0-9_]*\b")),
     ("Hardcoded GPON Splitter ID", re.compile(r"\bSPL-[A-Z0-9-]+\b")),
-    ("Hardcoded Microwave Link ID", re.compile(r"\bMW-(?:DSO|ACAD)[A-Z0-9-]*\b")),
+    ("Hardcoded Microwave Link ID", re.compile(r"\bMW-(?:DSO|ACAD|NOI|EXP)[A-Z0-9-]*\b")),
     ("Hardcoded Subsea System ID", re.compile(r"\bSUBSEA-[A-Z0-9-]+\b")),
-    ("Hardcoded Customer/Service ID", re.compile(r"\b(?:CUST-10\d\d|SVC-[A-Z0-9-]+)\b")),
-    ("Hardcoded Dubai POP/Node Tuple", re.compile(r"\b(?:C_EGB|C_MHH|C_AQI|C_JLC|C_SODC|J_DG|J_RAK|J_GB)\b")),
+    ("Hardcoded Customer/Service ID", re.compile(r"\b(?:CUST-[12]0\d\d|SVC-[A-Z0-9-]+)\b")),
+    ("Hardcoded Dataset Node Tuple", re.compile(r"\b(?:C_EGB|C_MHH|C_AQI|C_JLC|C_SODC|J_DG|J_RAK|J_GB|C_BNB|C_YADC|C_NSDC|C_OKIND|J_KG|J_DNDW|J_DNDE)\b")),
 ]
 
 
