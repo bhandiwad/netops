@@ -2,7 +2,7 @@
 
 > **From 10,000 Raw Multi-Vendor Alarms → Connected Causal Graph Clusters → Exact Slack-Compensated Dig Coordinates & Gated Remediation in Seconds.**
 
-An end-to-end, topology-agnostic, protocol-authentic **Network Operations Center (NOC) & Outside-Plant (OSP) Fibre Assurance Platform** built for converged mobile/fixed operators (**du / e&**), pure-play metro fibre & data-centre interconnect operators (**Constl**), high-scale RAN + microwave + metro fibre operators (**Vodafone Idea / Vi**), and subsea + wholesale DCI carriers (**PCCW Global / HKT**).
+An end-to-end, topology-agnostic, protocol-authentic **Network Operations Center (NOC) & Outside-Plant (OSP) Fibre Assurance Platform** built for **converged mobile/fixed national operators**, **pure-play metro fibre & data-centre interconnect (DCI) specialists**, **high-density 4G/5G RAN & microwave operators**, and **global subsea & wholesale carriers**.
 
 Unlike demo prototypes that hardcode topology rules or let chatbots guess network state, this platform enforces:
 1. **100% Topology-Agnostic Modular Engine (`backend/app/`)** — Normalized 6-layer PostgreSQL + PostGIS inventory (`osp_ducts`, `osp_cables`, `oms_links`, `optical_channels`, `ip_links`, `ran_sites`, `gpon_clusters`, `subsea_cables`, `customer_services`), connected-subgraph multi-fault alarm clustering, dynamic NetworkX Dijkstra optical rerouting, and pluggable `@register_classifier` strategy plugins. Enforced on every commit by [`scripts/check_no_hardcoded_topology.py`](scripts/check_no_hardcoded_topology.py).
@@ -76,24 +76,24 @@ flowchart TB
 
 Switchable in real time from the top navigation bar (reference topology loaded declaratively from [`emulators/datasets/dubai_metro.json`](emulators/datasets/dubai_metro.json), swappable via `TELCO_DATASET_PATH`):
 
-| Archetype ID | Operator Profile | Active Network Layers & Focus |
+| Archetype | Operator Profile | Active Network Layers & Focus |
 | :--- | :--- | :--- |
-| **`du_converged`** | **Converged 4G/5G + Fibre + Enterprise** (*du / e& UAE archetype*) | Full 6-layer stack: OSP fibre, Ciena/Nokia DWDM, Cisco/Juniper IP/MPLS, Ericsson/Nokia 5G RAN hub-and-tail sites, GPON FTTH, and Enterprise SLAs. |
-| **`constl_fiber`** | **Pure-Play Metro Fibre, Wavelength & DCI** (*Constl archetype*) | Dense metro trunk & access fibre, 100G/400G DWDM wavelengths, SRLG diversity enforcement, Lepton GIS slack modeling, and live 1625nm OTDR monitoring. |
-| **`vi_india`** | **High-Scale 4G/5G RAN, Metro Fibre & Microwave** (*Vodafone Idea archetype*) | Multi-vendor 4G/5G RAN, 80 GHz E-Band microwave rain-fade vs. hardware fault disambiguation, rectifier AC mains / VRLA battery LVD countdowns, and civil roadwork cuts. |
-| **`pccw_subsea`** | **Global Subsea, Optical DCI & Wholesale Carrier** (*PCCW Global / HKT archetype*) | Subsea Cable Landing Station (`CLS`), Power Feed Equipment (`PFE`) high-voltage shunt fault isolation, Coherent OTDR (`C-OTDR`) repeater span localization, and Pre-FEC BER tracking. |
+| **Converged National** | **Converged 4G/5G + Fibre + Enterprise** | Full 6-layer stack: OSP fibre, Ciena/Nokia DWDM, Cisco/Juniper IP/MPLS, Ericsson/Nokia 5G RAN hub-and-tail sites, GPON FTTH, and Enterprise SLAs. |
+| **Metro Fibre & DCI** | **Pure-Play Metro Fibre, Wavelength & DCI** | Dense metro trunk & access fibre, 100G/400G DWDM wavelengths, SRLG diversity enforcement, Lepton GIS slack modeling, and live 1625nm OTDR monitoring. |
+| **High-Density RAN** | **High-Scale 4G/5G RAN, Metro Fibre & Microwave** | Multi-vendor 4G/5G RAN, 80 GHz E-Band microwave rain-fade vs. hardware fault disambiguation, rectifier AC mains / VRLA battery LVD countdowns, and civil roadwork cuts. |
+| **Subsea & Wholesale** | **Global Subsea, Optical DCI & Wholesale Carrier** | Subsea Cable Landing Station (`CLS`), Power Feed Equipment (`PFE`) high-voltage shunt fault isolation, Coherent OTDR (`C-OTDR`) repeater span localization, and Pre-FEC BER tracking. |
 
 ### Seven Verified End-to-End Fault Scenarios
 
-| # | Scenario ID | Classifier Plugin | Root Cause Isolated & Gated Actions |
+| # | Scenario | Classifier Plugin | Root Cause Isolated & Gated Actions |
 | :-: | :--- | :--- | :--- |
-| **1** | `szr_canal_fibre_cut` | `physical_fiber_duct_cut` | Reflective `.sor` break on 144F trunk (`7,780m` optical → `7,591m` trench, avoiding `189m` dig error); dynamically computes disjoint inland Dijkstra reroute + ServiceNow FSM crew dispatch. |
-| **2** | `difc_gate_srlg_cut` | `physical_fiber_duct_cut` | Civil trench damage severs dual cables inside shared duct `D-DG-EGB` / chamber `J_DG`, exposing hidden SRLG breach on dual-homed bank L3VPN. |
-| **3** | `al_quoz_dying_gasp_vs_cut` | `power_dying_gasp` | G.984 `dying-gasp` burst + live 1625nm `.sor` continuity check confirms utility AC blackout → **suppresses false OSP splicing truck roll**. |
-| **4** | `dso_optical_degradation` | `optical_degradation_tca` | Pre-FEC BER (`8.4e-4`) & OSNR (`14.2 dB`) TCA matched to `+4.8 dB` non-reflective pinched splice → proactively shifts 100G wave before FEC cliff. |
-| **5** | `ran_site_battery_lvd_countdown` | `ran_site_power_lvd` | Commercial AC loss at 5G hub site (`44.1V` approaching `43.2V` LVD, `36m` left before 3-site cascade) → dispatches emergency mobile diesel generator. |
-| **6** | `eband_microwave_rain_fade` | `microwave_weather_fade` | `42 mm/hr` rain squall attenuates 80 GHz link (`-69.4 dBm`) with automatic `ACM -> QPSK` downshift → **suppresses false tower-climber ODU replacement**. |
-| **7** | `pccw_subsea_shunt_fault` | `subsea_wetplant_shunt` | CLS `PFE` voltage drop (`+2,890V`, `318.5mA` earth leakage) + `C-OTDR` shunt at `412.6 km` → stages single-end PFE feed & terrestrial DCI wave reroute. |
+| **1** | **Metro Trunk Fibre Cut + Hidden SRLG Backup Failure** | `physical_fiber_duct_cut` | Reflective `.sor` break on 144F trunk (`7,780m` optical → `7,591m` trench, avoiding `189m` dig error); dynamically computes disjoint inland Dijkstra reroute + ServiceNow FSM crew dispatch. |
+| **2** | **Dual-Homed Bank HQ Outage via Shared Manhole Chamber** | `physical_fiber_duct_cut` | Civil trench damage severs dual cables inside shared duct `D-DG-EGB` / chamber `J_DG`, exposing hidden SRLG breach on dual-homed bank L3VPN. |
+| **3** | **Premises Power Blackout ('Dying Gasp') vs. Fibre Cut** | `power_dying_gasp` | G.984 `dying-gasp` burst + live 1625nm `.sor` continuity check confirms utility AC blackout → **suppresses false OSP splicing truck roll**. |
+| **4** | **Pre-Failure DWDM Optical OSNR & Pre-FEC BER Degradation** | `optical_degradation_tca` | Pre-FEC BER (`8.4e-4`) & OSNR (`14.2 dB`) TCA matched to `+4.8 dB` non-reflective pinched splice → proactively shifts 100G wave before FEC cliff. |
+| **5** | **5G Hub Site Rectifier AC Loss & Battery LVD Countdown** | `ran_site_power_lvd` | Commercial AC loss at 5G hub site (`44.1V` approaching `43.2V` LVD, `36m` left before 3-site cascade) → dispatches emergency mobile diesel generator. |
+| **6** | **80 GHz E-Band Microwave Rain-Fade vs. Hardware Fault** | `microwave_weather_fade` | `42 mm/hr` rain squall attenuates 80 GHz link (`-69.4 dBm`) with automatic `ACM -> QPSK` downshift → **suppresses false tower-climber ODU replacement**. |
+| **7** | **Subsea Wet-Plant Repeater Shunt & C-OTDR Localization** | `subsea_wetplant_shunt` | CLS `PFE` voltage drop (`+2,890V`, `318.5mA` earth leakage) + `C-OTDR` shunt at `412.6 km` → stages single-end PFE feed & terrestrial DCI wave reroute. |
 
 ---
 

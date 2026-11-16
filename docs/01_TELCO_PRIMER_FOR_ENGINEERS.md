@@ -104,7 +104,7 @@ On a logical Visio diagram, those look 100% redundant! **In reality**, outside t
 
 ---
 
-### 2.6 Subsea Wet-Plant & `PFE` Shunt Faults (PCCW Global Archetype)
+### 2.6 Subsea Wet-Plant & `PFE` Shunt Faults (Subsea & Wholesale Archetype)
 Undersea cables (`subsea_cables`) have optical amplifiers (**repeaters**) on the ocean floor every `60–80 km`. Because there are no power outlets underwater, the **Cable Landing Station (CLS)** on shore uses **Power Feed Equipment (`PFE`)** to pump **`+4,000V DC` constant current** down a copper tube inside the cable, using the ocean itself as ground return.
 If a ship anchor scrapes the cable insulation `412 km` offshore without snapping the glass fibers (**a shunt fault**), current leaks into seawater, `PFE` voltage drops (`+4,120V -> +2,890V`), and **Coherent OTDR (`C-OTDR`)** pinpoints which repeater span (`R07–R08`) needs single-end power reconfiguration (`SubseaWetPlantShuntClassifier`).
 

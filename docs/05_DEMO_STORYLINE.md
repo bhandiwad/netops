@@ -18,9 +18,9 @@ This guide walks through every scenario and screen you can showcase live across 
 
 | Audience Archetype | Profile Selector | Lead Scenarios to Emphasise |
 | :--- | :--- | :--- |
-| **Metro Fibre & DCI** *(e.g., Constl)* | `Pure-Play Metro Fibre, Wavelength & DCI` | Act 1 (Shared-duct audit) -> Act 2 (Canal trunk cut + 100G reroute) -> DIFC Bank shared chamber -> Act 4B (Pre-failure BER). |
-| **National Converged** *(e.g., e&, du, Vi)* | `Converged 4G/5G + Fibre + Enterprise` | Act 2 (13-alarm storm across optical/IP/5G) -> Act 4A (Al Quoz power blackout) -> Act 4C (5G battery drain & 80 GHz rain fade). |
-| **Subsea & Wholesale** *(e.g., PCCW Global)* | `Global Subsea, Optical DCI & Wholesale` | Act 1 (Diverse DCI route proof) -> Act 4C (Jebel Ali CLS subsea repeater shunt) -> Act 2 (100G protection switch). |
+| **Metro Fibre & DCI Operators** | `Pure-Play Metro Fibre, Wavelength & DCI` | Act 1 (Shared-duct audit) -> Act 2 (Canal trunk cut + 100G reroute) -> DIFC Bank shared chamber -> Act 4B (Pre-failure BER). |
+| **Converged National Telcos** | `Converged 4G/5G + Fibre + Enterprise` | Act 2 (13-alarm storm across optical/IP/5G) -> Act 4A (Al Quoz power blackout) -> Act 4C (5G battery drain & 80 GHz rain fade). |
+| **Subsea & Wholesale Carriers** | `Global Subsea, Optical DCI & Wholesale` | Act 1 (Diverse DCI route proof) -> Act 4C (Jebel Ali CLS subsea repeater shunt) -> Act 2 (100G protection switch). |
 
 ---
 

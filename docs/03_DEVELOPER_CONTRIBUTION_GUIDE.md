@@ -133,9 +133,9 @@ Add a JSON object with `id`, `title`, `domain`, `oem_tags`, `symptoms`, and `pro
 
 ---
 
-## 3. Recipe B: Loading a Different City / Customer Topology Dataset
+## 3. Recipe B: Loading a Different City / Regional Topology Dataset
 
-Because all topology lives outside `backend/app/`, you can create a new dataset for **Abu Dhabi (`e&`)**, **Mumbai (`Constl`)**, or **Hong Kong–Singapore (`PCCW Global`)** without changing a single line of backend code:
+Because all topology lives outside `backend/app/`, you can create a new dataset for any metro ring, national corridor, or subsea landing region (e.g., **Abu Dhabi**, **Mumbai**, or **Hong Kong–Singapore**) without changing a single line of backend code:
 
 1. Copy [`emulators/datasets/dubai_metro.json`](../emulators/datasets/dubai_metro.json) to `emulators/datasets/mumbai_metro.json`.
 2. Edit `nodes`, `ducts`, `cables`, `oms_links`, `wavelengths`, `customers`, and `services`.
