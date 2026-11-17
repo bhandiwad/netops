@@ -11,7 +11,7 @@ import {
   Sun,
 } from './components/icons';
 import { nocApi } from './api/client';
-import { ConnectorEditorModal, LlmSettingsModal } from './components/ConfigModals';
+import { ConnectorEditorModal, ImportDataModal, LlmSettingsModal } from './components/ConfigModals';
 import type {
   Connector,
   OperatorProfile,
@@ -67,6 +67,7 @@ export const App: React.FC = () => {
   const [benchmarkResult, setBenchmarkResult] = useState<StormBenchmarkResult | null>(null);
 
   const [showLlmModal, setShowLlmModal] = useState<boolean>(false);
+  const [showImportModal, setShowImportModal] = useState<boolean>(false);
   const [llmProvider, setLlmProvider] = useState<string>('anthropic');
   const [llmModel, setLlmModel] = useState<string>('claude-sonnet-4-20250514');
   const [llmApiKey, setLlmApiKey] = useState<string>('');
@@ -214,7 +215,40 @@ export const App: React.FC = () => {
     try {
       const data = await nocApi.parseUploadedSor(file);
       setInspectedOtdr(data);
+      setShowImportModal(false);
+      setPrimaryNav('workspace');
       setStageTab('otdr');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleImportKmlFile = async (file: File) => {
+    setBusyAction(`Importing KML ${file.name}...`);
+    try {
+      const res = await nocApi.importKmlFile(file);
+      setShowImportModal(false);
+      await refreshOverview();
+      setPrimaryNav('workspace');
+      setStageTab('map');
+      if (res.primary_cable_id) {
+        await handleSelectCable(res.primary_cable_id);
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleImportCsvFile = async (file: File) => {
+    setBusyAction(`Correlating ${file.name}...`);
+    try {
+      const res = await nocApi.importAlarmsCsv(file);
+      setShowImportModal(false);
+      await refreshOverview();
+      if (res.incident?.incident_id) {
+        setSelectedIncidentId(res.incident.incident_id);
+      }
+      setPrimaryNav('workspace');
     } finally {
       setBusyAction(null);
     }
@@ -461,6 +495,7 @@ export const App: React.FC = () => {
             onClearCable={handleClearCable}
             onTriggerCutOnCable={handleTriggerCutOnCable}
             onUploadSorFile={handleUploadSorFile}
+            onOpenImportModal={() => setShowImportModal(true)}
             onApproveActions={handleApproveActions}
             onOpenRouteDiversity={() => setPrimaryNav('topology')}
           />
@@ -534,6 +569,17 @@ export const App: React.FC = () => {
         onChangeMode={setEditMode}
         onClose={() => setEditingConnector(null)}
         onSave={handleSaveConnector}
+      />
+
+      <ImportDataModal
+        open={showImportModal}
+        mapCenter={overview.map_center}
+        cables={overview.gis?.cables || []}
+        busy={!!busyAction}
+        onClose={() => setShowImportModal(false)}
+        onImportKml={handleImportKmlFile}
+        onUploadSor={handleUploadSorFile}
+        onImportCsv={handleImportCsvFile}
       />
     </div>
   );

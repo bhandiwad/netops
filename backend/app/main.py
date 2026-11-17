@@ -46,7 +46,7 @@ from .schemas import (
     StormBenchmarkPayload,
     TriggerFaultPayload,
 )
-from .spatial import locate_fault_on_cable_postgis
+from .spatial import import_kml_osp_routes, locate_fault_on_cable_postgis, parse_alarms_csv
 
 app = FastAPI(title="Telco Network Operations Copilot API", version="2.1.0")
 app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -261,8 +261,25 @@ async def get_overview() -> dict[str, Any]:
             sla_tiers = {r["tier_name"]: dict(r) for r in cur.fetchall()}
             cur.execute("SELECT * FROM customers")
             customers = {r["id"]: dict(r) for r in cur.fetchall()}
+            cur.execute("SELECT id, vendor, pop_node, monitored_cables_json FROM rfts_units")
+            rfts_rows = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT * FROM customer_services")
             services = [dict(r) for r in cur.fetchall()]
+
+    monitored_cables_set: set[str] = set()
+    for rtu in rfts_rows:
+        mc = rtu.get("monitored_cables_json") or []
+        if isinstance(mc, str):
+            try:
+                mc = json.loads(mc)
+            except Exception:
+                mc = []
+        monitored_cables_set.update(mc)
+
+    for c in cables:
+        is_rfts = bool(c["id"] in monitored_cables_set and c.get("role") in ("trunk", "dark"))
+        c["rfts_monitored"] = is_rfts
+        c["monitoring_mode"] = "auto_rfts_1625nm" if is_rfts else "handheld_otdr_sor"
 
     oms_by_pair: dict[tuple[str, str], str] = {}
     for oms in oms_links:
@@ -364,6 +381,73 @@ async def get_overview() -> dict[str, Any]:
         or "AED"
     )
 
+    pop_ids = [nid for nid, n in net_nodes.items() if n.get("kind") == "pop"] or ["POP-01", "POP-02"]
+    cust_ids = [nid for nid, n in net_nodes.items() if n.get("kind") == "customer"] or pop_ids
+    ran_ids = list(ran_sites.keys()) or ["GNB-01"]
+    duct_ids = [d["id"] for d in ducts] or ["DUCT-01"]
+    background_noise = {
+        "suppressed_total": 38,
+        "flapping_transceivers": 17,
+        "planned_maintenance_crq": 12,
+        "transient_ran_warnings": 9,
+        "events": [
+            {
+                "id": "SUP-CRQ-101",
+                "category": "PLANNED_CRQ",
+                "severity": "MINOR",
+                "resource_id": f"RTR-{pop_ids[0]}",
+                "source_oem": "servicenow_itsm",
+                "reason": "Muted by active Change Window CHG0049118 (BGP policy maintenance)",
+                "raw_text": f"RTR-{pop_ids[0]}: BGP peer maintenance state — auto-suppressed under approved CRQ window.",
+            },
+            {
+                "id": "SUP-DOM-102",
+                "category": "SFP_DOM_WARN",
+                "severity": "WARNING",
+                "resource_id": f"CPE-{cust_ids[0]}-Gi0/0/1",
+                "source_oem": "nmsworks_cygnet",
+                "reason": "Chronic dirty-ferrule Rx power warning (-19.4 dBm; stable 14d, non-service-affecting)",
+                "raw_text": f"CPE-{cust_ids[0]}: Transceiver Rx optical power low warning (-19.4 dBm), zero CRC errors.",
+            },
+            {
+                "id": "SUP-FLP-103",
+                "category": "FLAP_DAMPENED",
+                "severity": "MINOR",
+                "resource_id": f"RTR-{pop_ids[-1]}:TenGigE0/2/0/4",
+                "source_oem": "cisco_syslog",
+                "reason": "Hold-down timer dampened sub-50ms transient CPE port bounce (x6 in 15m)",
+                "raw_text": f"RTR-{pop_ids[-1]}: Sub-threshold interface micro-flap dampened; BFD session remained UP.",
+            },
+            {
+                "id": "SUP-CRQ-104",
+                "category": "PLANNED_CRQ",
+                "severity": "WARNING",
+                "resource_id": duct_ids[0],
+                "source_oem": "servicenow_itsm",
+                "reason": "Scheduled civil manhole lid & sub-duct inspection CHG0049102 (no optical loss)",
+                "raw_text": f"Civil chamber access sensor open near {duct_ids[0]} — matched scheduled CHG0049102.",
+            },
+            {
+                "id": "SUP-RAN-105",
+                "category": "RAN_TRANSIENT",
+                "severity": "WARNING",
+                "resource_id": ran_ids[0],
+                "source_oem": "ericsson_enm",
+                "reason": "Ambient RRH cabinet temperature warning (41.2°C < 55°C critical threshold)",
+                "raw_text": f"{ran_ids[0]}: Outdoor RRU thermal sensor minor high warning; fan speed nominal.",
+            },
+            {
+                "id": "SUP-RAN-106",
+                "category": "RAN_TRANSIENT",
+                "severity": "MINOR",
+                "resource_id": ran_ids[-1],
+                "source_oem": "nokia_nsp",
+                "reason": "Brief PRB congestion spike cleared within 60s soak window",
+                "raw_text": f"{ran_ids[-1]}: DL PRB utilization >88% for 25s — auto-cleared before soak expiry.",
+            },
+        ],
+    }
+
     payload = {
         "active_region": emu_status.get("active_region", "uae_dubai"),
         "region_name": emu_status.get("region_name", "UAE — Dubai Metro"),
@@ -371,6 +455,7 @@ async def get_overview() -> dict[str, Any]:
         "map_center": emu_status.get("map_center", [55.245, 25.155]),
         "map_zoom": emu_status.get("map_zoom", 10.9),
         "available_regions": emu_status.get("available_regions", []),
+        "background_noise": background_noise,
         "connectors": connectors,
         "gis": {
             "ducts": ducts,
@@ -641,6 +726,71 @@ async def upload_and_parse_sor(file: UploadFile = File(...)) -> dict[str, Any]:
         "key_events": [vars(e) for e in parsed.key_events],
         "trace_points_db": parsed.trace_points_db[::4],
         "postgis_localization": loc,
+    }
+
+
+@app.post("/api/v1/import/kml")
+async def upload_and_import_kml(file: UploadFile = File(...)) -> dict[str, Any]:
+    raw = await file.read()
+    try:
+        imported = import_kml_osp_routes(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    emu_base = get_emulator_control_base_url()
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            await client.post(
+                f"{emu_base}/emulator/osp/import",
+                json={
+                    "cables": imported["cables"],
+                    "ducts": imported["ducts"],
+                    "manholes": imported["manholes"],
+                },
+            )
+    except Exception:
+        pass
+
+    log_audit(
+        "noc_operator",
+        "IMPORT_KML_OSP",
+        file.filename or "route.kml",
+        {
+            "cables": [c["id"] for c in imported["cables"]],
+            "chambers": imported["imported_chamber_count"],
+        },
+    )
+    invalidate_overview_cache()
+    return {
+        "filename": file.filename,
+        "imported_cable_count": imported["imported_cable_count"],
+        "imported_chamber_count": imported["imported_chamber_count"],
+        "primary_cable_id": imported["cables"][0]["id"] if imported["cables"] else None,
+        "cables": imported["cables"],
+    }
+
+
+@app.post("/api/v1/import/alarms-csv")
+async def upload_and_correlate_alarms_csv(file: UploadFile = File(...)) -> dict[str, Any]:
+    raw = await file.read()
+    try:
+        alarms = parse_alarms_csv(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    incidents = await correlate_alarms_into_incidents(alarms)
+    log_audit(
+        "noc_operator",
+        "IMPORT_ALARMS_CSV",
+        file.filename or "alarms.csv",
+        {"alarms_imported": len(alarms), "incidents_created": len(incidents)},
+    )
+    invalidate_overview_cache()
+    return {
+        "filename": file.filename,
+        "alarms_imported": len(alarms),
+        "incidents": incidents,
+        "incident": incidents[0] if incidents else None,
     }
 
 

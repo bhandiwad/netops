@@ -7,12 +7,17 @@ export { default as AlertOctagon } from 'lucide-react/dist/esm/icons/alert-octag
 export { default as AlertTriangle } from 'lucide-react/dist/esm/icons/alert-triangle';
 export { default as ArrowRight } from 'lucide-react/dist/esm/icons/arrow-right';
 export { default as BatteryCharging } from 'lucide-react/dist/esm/icons/battery-charging';
+export { default as Check } from 'lucide-react/dist/esm/icons/check';
 export { default as CheckCircle2 } from 'lucide-react/dist/esm/icons/check-circle-2';
 export { default as ChevronRight } from 'lucide-react/dist/esm/icons/chevron-right';
 export { default as CloudRain } from 'lucide-react/dist/esm/icons/cloud-rain';
+export { default as Copy } from 'lucide-react/dist/esm/icons/copy';
 export { default as Crosshair } from 'lucide-react/dist/esm/icons/crosshair';
 export { default as Download } from 'lucide-react/dist/esm/icons/download';
+export { default as ExternalLink } from 'lucide-react/dist/esm/icons/external-link';
 export { default as FileCode2 } from 'lucide-react/dist/esm/icons/file-code-2';
+export { default as FileSpreadsheet } from 'lucide-react/dist/esm/icons/file-spreadsheet';
+export { default as FlaskConical } from 'lucide-react/dist/esm/icons/flask-conical';
 export { default as GitBranch } from 'lucide-react/dist/esm/icons/git-branch';
 export { default as Globe } from 'lucide-react/dist/esm/icons/globe';
 export { default as Layers } from 'lucide-react/dist/esm/icons/layers';

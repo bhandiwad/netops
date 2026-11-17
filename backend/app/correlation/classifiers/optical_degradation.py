@@ -49,8 +49,10 @@ class OpticalDegradationClassifier(HypothesisClassifier):
 
         summary = (
             f"Pre-failure optical degradation on {och_id} (Pre-FEC BER {pre_ber}, OSNR {osnr_db} dB) "
-            f"caused by a +{step_loss_db} dB macro-bend / pinched splice on {cid} at {opt_dist:.1f} m optical "
-            f"({fault_loc['corrected_trench_distance_m']} m trench, near {fault_loc['upstream_manhole']['name']})."
+            f"caused by a +{step_loss_db} dB macro-bend / pinched splice on {cid}. "
+            f"Anchored at {fault_loc['upstream_manhole']['manhole_id']} ({fault_loc['upstream_manhole']['name']}), "
+            f"~{fault_loc['rounded_from_upstream_manhole_m']:,} m (±{fault_loc['confidence_radius_m']} m) toward "
+            f"{fault_loc['downstream_manhole']['manhole_id']}."
         )
 
         actions: list[ProposedAction] = []
@@ -59,18 +61,18 @@ class OpticalDegradationClassifier(HypothesisClassifier):
             actions.append(
                 ProposedAction(
                     action_id=f"ACT-OPT-REROUTE-{och_id}",
-                    target_system="Optical SDN Controller",
+                    target_system="Transport Engineering / Optical SDN",
                     connector_id=w_obj.get("controller_id", "ciena_mcp"),
                     action_type="CIENA_WAVELENGTH_REROUTE",
-                    title=f"Proactively Shift {w_obj.get('rate', '100G')} Wave ({och_id}) Before FEC Cliff",
+                    title=f"Stage Hitless Maintenance Switch ({och_id} -> {' -> '.join(alt_path)}) Before FEC Cliff",
                     description=(
-                        f"Hitless wavelength switch onto disjoint path {' -> '.join(alt_path)} to bypass "
-                        f"+{step_loss_db} dB pinched splice on {cid}."
+                        f"Traffic remains up on {och_id} with <1.1 dB FEC margin. Pre-validated disjoint path "
+                        f"{' -> '.join(alt_path)} ready for Transport NOC approval so OSP crew can re-dress {cid} hitlessly."
                     ),
                     payload={
                         "och_id": och_id,
                         "new_path": alt_path,
-                        "reason": f"Proactive Pre-FEC BER TCA remediation on {cid}",
+                        "reason": f"Proactive Pre-FEC BER TCA maintenance drain on {cid}",
                     },
                 )
             )

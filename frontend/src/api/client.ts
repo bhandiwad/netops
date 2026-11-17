@@ -64,6 +64,37 @@ export const nocApi = {
     return r.json();
   },
 
+  async importKmlFile(file: File): Promise<{
+    filename: string;
+    imported_cable_count: number;
+    imported_chamber_count: number;
+    primary_cable_id?: string | null;
+  }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/v1/import/kml', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const errText = await r.text();
+      throw new Error(errText || `Failed to import KML file ${file.name}`);
+    }
+    return r.json();
+  },
+
+  async importAlarmsCsv(file: File): Promise<{
+    filename: string;
+    alarms_imported: number;
+    incident?: { incident_id: string } | null;
+  }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/v1/import/alarms-csv', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const errText = await r.text();
+      throw new Error(errText || `Failed to import alarm CSV ${file.name}`);
+    }
+    return r.json();
+  },
+
   async approveIncidentActions(incidentId: string, actionIds?: string[]): Promise<void> {
     const r = await fetch(`/api/v1/incidents/${incidentId}/approve`, {
       method: 'POST',

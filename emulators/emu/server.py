@@ -138,9 +138,16 @@ def _init_baseline_traces_and_pm() -> None:
             rfts_by_cable[cid] = rtu
 
     for cid, cinfo in cables_by_id.items():
-        rtu = rfts_by_cable.get(cid, {"id": f"ONMSI-RTU-{cinfo['path_nodes'][0]}", "vendor": "viavi", "pop": cinfo["path_nodes"][0]})
+        is_auto_rfts = cid in rfts_by_cable and cinfo.get("role", "trunk") in ("trunk", "dark")
+        rtu = rfts_by_cable.get(
+            cid,
+            {"id": f"FIELD-OTDR-{cinfo['path_nodes'][0]}", "vendor": "viavi", "pop": cinfo["path_nodes"][0]},
+        )
         supplier = "VIAVI Solutions" if rtu["vendor"] == "viavi" else "EXFO Inc."
-        unit = "ONMSi OTU-8000" if rtu["vendor"] == "viavi" else "Nova Fiber FG-750"
+        if is_auto_rfts:
+            unit = "ONMSi OTU-8000 (Auto-RFTS)" if rtu["vendor"] == "viavi" else "Nova Fiber FG-750 (Auto-RFTS)"
+        else:
+            unit = "SmartOTDR Handheld (Field .sor)" if rtu["vendor"] == "viavi" else "MaxTester 730C (Field .sor)"
         splices = [
             (sp["optical_distance_m"], sp["manhole_id"])
             for sp in cinfo["splices"][1:-1]
@@ -163,6 +170,7 @@ def _init_baseline_traces_and_pm() -> None:
             "cable_id": cid,
             "rtu_id": rtu["id"],
             "vendor": rtu["vendor"],
+            "monitoring_mode": "auto_rfts_1625nm" if is_auto_rfts else "handheld_otdr_sor",
             "launch_node": cinfo["path_nodes"][0],
             "status": "HEALTHY",
             "optical_length_m": cinfo["optical_length_m"],
@@ -327,9 +335,16 @@ def _synthesize_cable_cut_alarms(cable_id: str, cut_ratio: float, scenario_id: s
 
     # Update binary .sor trace for this cable with reflective break at optical_cut_m
     rfts_by_cable = {cid: rtu for rtu in RFTS for cid in rtu["monitors"]}
-    rtu = rfts_by_cable.get(cable_id, {"id": "ONMSI-RTU-QZ", "vendor": "viavi", "pop": cinfo["path_nodes"][0]})
+    is_auto_rfts = cable_id in rfts_by_cable and cinfo.get("role", "trunk") in ("trunk", "dark")
+    rtu = rfts_by_cable.get(
+        cable_id,
+        {"id": f"FIELD-OTDR-{cinfo['path_nodes'][0]}", "vendor": "viavi", "pop": cinfo["path_nodes"][0]},
+    )
     supplier = "VIAVI Solutions" if rtu["vendor"] == "viavi" else "EXFO Inc."
-    unit = "ONMSi OTU-8000" if rtu["vendor"] == "viavi" else "Nova Fiber FG-750"
+    if is_auto_rfts:
+        unit = "ONMSi OTU-8000 (Auto-RFTS)" if rtu["vendor"] == "viavi" else "Nova Fiber FG-750 (Auto-RFTS)"
+    else:
+        unit = "SmartOTDR Handheld (Field .sor)" if rtu["vendor"] == "viavi" else "MaxTester 730C (Field .sor)"
     splices = [(sp["optical_distance_m"], sp["manhole_id"]) for sp in cinfo["splices"][1:-1]]
     GENERATED_SOR_TRACES[cable_id] = generate_sor_bytes(
         cable_id=cable_id,
@@ -348,6 +363,7 @@ def _synthesize_cable_cut_alarms(cable_id: str, cut_ratio: float, scenario_id: s
         "cable_id": cable_id,
         "rtu_id": rtu["id"],
         "vendor": rtu["vendor"],
+        "monitoring_mode": "auto_rfts_1625nm" if is_auto_rfts else "handheld_otdr_sor",
         "launch_node": cinfo["path_nodes"][0],
         "status": "FIBER_BREAK",
         "optical_length_m": cinfo["optical_length_m"],
@@ -387,11 +403,16 @@ def _synthesize_cable_cut_alarms(cable_id: str, cut_ratio: float, scenario_id: s
         }
         alarms.append(alm)
 
-    # 1. VIAVI ONMSi / EXFO Nova OTDR reflective break alarm
+    # 1. VIAVI ONMSi / EXFO Nova OTDR reflective break alarm (Auto-RFTS for trunks, Handheld .sor for access)
     rfts_oem = "viavi_onmsi" if rtu["vendor"] == "viavi" else "exfo_nova"
+    trace_mode_prefix = (
+        f"[{rtu['id']} · 1625nm Auto-RFTS]"
+        if is_auto_rfts
+        else f"[{unit} · Field .sor Upload]"
+    )
     add_alarm(
         source_oem=rfts_oem,
-        protocol="RFTS-REST+SOR",
+        protocol="RFTS-REST+SOR" if is_auto_rfts else "Handheld-SOR-Upload",
         layer="fibre_osp",
         resource_id=cable_id,
         node_id=cinfo["path_nodes"][0],
@@ -399,13 +420,14 @@ def _synthesize_cable_cut_alarms(cable_id: str, cut_ratio: float, scenario_id: s
         specific_problem="OTDR_REFLECTIVE_FIBER_BREAK",
         probable_cause="Optical Fiber Break / High Reflectance Event (-18.4 dB)",
         raw_text=(
-            f"[{rtu['id']}] 1625nm OTDR trace alarm on {cable_id} from {cinfo['path_nodes'][0]}: "
-            f"Reflective break at optical distance {optical_cut_m:.1f} m (loss > 28.5 dB, refl -18.4 dB). "
-            f"SR-4731 .sor trace ready."
+            f"{trace_mode_prefix} 1625nm trace on {cable_id} from {cinfo['path_nodes'][0]}: "
+            f"Reflective break at optical distance {optical_cut_m:.0f} m (loss > 28.5 dB, refl -18.4 dB). "
+            f"SR-4731 .sor verified."
         ),
         extra={
             "cable_id": cable_id,
             "rtu_id": rtu["id"],
+            "monitoring_mode": "auto_rfts_1625nm" if is_auto_rfts else "handheld_otdr_sor",
             "launch_node": cinfo["path_nodes"][0],
             "optical_distance_m": optical_cut_m,
             "sor_url": f"/viavi-onmsi/api/v1/traces/{cable_id}.sor",
@@ -712,6 +734,61 @@ async def switch_emulator_dataset(req: DatasetSwitchRequest) -> dict[str, Any]:
         "region_name": DATASET.get("dataset_name"),
         "currency": DATASET.get("currency", "AED"),
     }
+
+
+class OspImportPayload(BaseModel):
+    cables: list[dict[str, Any]] = []
+    ducts: list[dict[str, Any]] = []
+    manholes: list[dict[str, Any]] = []
+
+
+@app.post("/emulator/osp/import")
+async def import_custom_osp_routes(req: OspImportPayload) -> dict[str, Any]:
+    """Register user-imported KML ducts, manholes, and cables in the emulator and synthesize baseline .sor traces."""
+    existing_duct_ids = {d["id"] for d in OSP_DATA.setdefault("ducts", [])}
+    for d in req.ducts:
+        if d["id"] not in existing_duct_ids:
+            OSP_DATA["ducts"].append(d)
+
+    existing_mh_ids = {m["id"] for m in OSP_DATA.setdefault("manholes", [])}
+    for m in req.manholes:
+        if m["id"] not in existing_mh_ids:
+            OSP_DATA["manholes"].append(m)
+
+    cables_list = OSP_DATA.setdefault("cables", [])
+    cables_idx = {c["id"]: i for i, c in enumerate(cables_list)}
+    for c in req.cables:
+        if c["id"] in cables_idx:
+            cables_list[cables_idx[c["id"]]] = c
+        else:
+            cables_list.append(c)
+
+        splices = [(sp["optical_distance_m"], sp["manhole_id"]) for sp in c.get("splices", [])[1:-1]]
+        GENERATED_SOR_TRACES[c["id"]] = generate_sor_bytes(
+            cable_id=c["id"],
+            fiber_number=1,
+            wavelength_nm=1625,
+            location_a=c["path_nodes"][0],
+            location_b=c["path_nodes"][-1],
+            supplier_name="VIAVI Solutions",
+            unit_name="SmartOTDR Handheld (Field .sor)",
+            serial_number=f"FIELD-OTDR-{c['path_nodes'][0]}",
+            total_optical_length_m=float(c["optical_length_m"]),
+            splice_distances_m=splices,
+            cut_distance_optical_m=None,
+        )
+        OTDR_MEASUREMENT_META[c["id"]] = {
+            "cable_id": c["id"],
+            "rtu_id": f"FIELD-OTDR-{c['path_nodes'][0]}",
+            "vendor": "viavi",
+            "monitoring_mode": "handheld_otdr_sor",
+            "launch_node": c["path_nodes"][0],
+            "status": "HEALTHY",
+            "optical_length_m": c["optical_length_m"],
+            "fault_distance_optical_m": None,
+            "measured_at": _now_iso(),
+        }
+    return {"status": "imported", "cable_count": len(req.cables)}
 
 
 @app.post("/emulator/faults/inject")

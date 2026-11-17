@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Activity, Download, Upload, AlertOctagon } from './icons';
+import { Activity, AlertOctagon, Download, ExternalLink, Upload } from './icons';
 
 interface OtdrTracePanelProps {
   trace: any | null;
@@ -29,7 +29,7 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
               No cable selected
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Click any fibre cable on the map or upload an OTDR <code className="font-mono">.sor</code> file to view its trace and street distance.
+              Click any fibre cable on the map—or upload a field handheld <code className="font-mono">.sor</code> file—to inspect splice landmarks and dig distance.
             </p>
           </div>
         </div>
@@ -47,7 +47,7 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
             onClick={() => fileInputRef.current?.click()}
             className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 text-xs font-medium flex items-center gap-2 transition"
           >
-            <Upload className="w-3.5 h-3.5" /> Upload .sor File
+            <Upload className="w-3.5 h-3.5" /> Upload Field .sor
           </button>
         </div>
       </div>
@@ -76,20 +76,50 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
     .join(' ');
 
   const faultOpticalM = trace.fault_distance_optical_m;
+  const isHandheld =
+    faultLocation?.monitoring_mode === 'HANDHELD_OTDR_SOR' ||
+    String(trace.unit_name || '').toLowerCase().includes('handheld') ||
+    String(trace.unit_name || '').toLowerCase().includes('field');
+
+  const roundedTrenchM =
+    faultLocation?.rounded_trench_distance_m ??
+    (faultLocation?.corrected_trench_distance_m !== undefined
+      ? Math.round(faultLocation.corrected_trench_distance_m)
+      : undefined);
+  const roundedErrM =
+    faultLocation?.rounded_error_avoided_m ??
+    (faultLocation?.dispatch_error_avoided_m !== undefined
+      ? Math.round(faultLocation.dispatch_error_avoided_m)
+      : undefined);
+  const radM = faultLocation?.confidence_radius_m ?? 20;
+  const fromUpM =
+    faultLocation?.rounded_from_upstream_manhole_m ??
+    (faultLocation?.distance_from_upstream_manhole_m !== undefined
+      ? Math.round(faultLocation.distance_from_upstream_manhole_m)
+      : 0);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
             {trace.cable_id}
           </span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+              isHandheld
+                ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
+                : 'bg-sky-50 text-sky-700 dark:bg-sky-950/70 dark:text-sky-300'
+            }`}
+          >
+            {isHandheld ? 'Field Handheld .sor' : '1625 nm Auto-RFTS'}
+          </span>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {trace.supplier_name} · {trace.wavelength_nm} nm
+            {trace.supplier_name} · {trace.unit_name}
           </span>
           {faultOpticalM ? (
             <span className="px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 text-[11px] font-medium flex items-center gap-1">
-              <AlertOctagon className="w-3 h-3" /> Break at {faultOpticalM} m
+              <AlertOctagon className="w-3 h-3" /> Break at ~{Math.round(faultOpticalM).toLocaleString()} m glass
             </span>
           ) : (
             <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium">
@@ -119,7 +149,7 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
             onClick={() => fileInputRef.current?.click()}
             className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 flex items-center gap-1.5 text-xs font-medium transition"
           >
-            <Upload className="w-3.5 h-3.5" /> Upload .sor
+            <Upload className="w-3.5 h-3.5" /> Upload Field .sor
           </button>
         </div>
       </div>
@@ -170,7 +200,7 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
                     fill={isBreak ? '#e11d48' : '#64748b'}
                     className={`text-[10px] font-mono ${isBreak ? 'font-semibold' : ''}`}
                   >
-                    {isBreak ? `Break (${ev.distance_m} m)` : `E${ev.event_number}`}
+                    {isBreak ? `Break (~${Math.round(ev.distance_m)} m)` : `E${ev.event_number}`}
                   </text>
                 </g>
               );
@@ -204,33 +234,33 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
         <div className="bg-slate-50/70 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-900 dark:text-white mb-3">
-              Glass-to-Street Distance
+              Splice-Anchored Dig Corridor
             </div>
 
-            {faultLocation && faultLocation.corrected_trench_distance_m !== undefined ? (
+            {faultLocation && roundedTrenchM !== undefined ? (
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Raw OTDR glass</span>
                   <span className="font-mono font-medium text-slate-900 dark:text-white">
-                    {faultLocation.optical_distance_m} m
+                    ~{Math.round(faultLocation.optical_distance_m || 0).toLocaleString()} m
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Manhole slack loops</span>
+                  <span>Chamber slack &amp; helix</span>
                   <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
-                    −{faultLocation.slack_Coils_subtracted_m} m
+                    −{Math.round(faultLocation.slack_Coils_subtracted_m || 0)} m ({faultLocation.helix_factor}x)
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Street trench spot</span>
+                  <span>Street dig corridor</span>
                   <span className="font-mono font-semibold text-slate-900 dark:text-white">
-                    {faultLocation.corrected_trench_distance_m} m
+                    ~{roundedTrenchM.toLocaleString()} m (±{radM} m)
                   </span>
                 </div>
-                <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800 flex justify-between text-emerald-700 dark:text-emerald-400 font-medium">
-                  <span>Dig error avoided</span>
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between text-emerald-700 dark:text-emerald-400 font-medium">
+                  <span>Wrong-pit dig avoided</span>
                   <span className="font-mono font-semibold">
-                    {faultLocation.dispatch_error_avoided_m} m
+                    ~{roundedErrM?.toLocaleString()} m
                   </span>
                 </div>
               </div>
@@ -244,15 +274,28 @@ export const OtdrTracePanel: React.FC<OtdrTracePanelProps> = ({
           </div>
 
           {faultLocation?.upstream_manhole && (
-            <div className="mt-3 pt-2.5 border-t border-slate-200/80 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-              Between{' '}
-              <strong className="font-mono text-slate-800 dark:text-slate-200">
-                {faultLocation.upstream_manhole?.manhole_id}
-              </strong>{' '}
-              (+{faultLocation.distance_from_upstream_manhole_m} m) and{' '}
-              <strong className="font-mono text-slate-800 dark:text-slate-200">
-                {faultLocation.downstream_manhole?.manhole_id}
-              </strong>
+            <div className="mt-3 pt-2.5 border-t border-slate-200/80 dark:border-slate-800 space-y-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              <div>
+                Anchor at{' '}
+                <strong className="font-mono text-slate-800 dark:text-slate-200">
+                  {faultLocation.upstream_manhole?.manhole_id}
+                </strong>{' '}
+                → measure <strong className="font-mono text-slate-800 dark:text-slate-200">~{fromUpM} m (±{radM} m)</strong> toward{' '}
+                <strong className="font-mono text-slate-800 dark:text-slate-200">
+                  {faultLocation.downstream_manhole?.manhole_id}
+                </strong>
+              </div>
+              {faultLocation.google_maps_url && (
+                <a
+                  href={faultLocation.google_maps_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400 hover:underline font-medium"
+                >
+                  <span>Open GPS pin in Google Maps</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
             </div>
           )}
         </div>

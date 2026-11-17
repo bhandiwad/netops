@@ -63,11 +63,33 @@ export interface OspCable {
   bridges: string[];
   fibres: number;
   role: string;
+  rfts_monitored?: boolean;
+  monitoring_mode?: 'auto_rfts_1625nm' | 'handheld_otdr_sor' | string;
   helix_factor: number;
   trench_length_m: number;
   optical_length_m: number;
   splices_json: OspSplice[];
   coords_json: [number, number][];
+}
+
+export interface Tia598TubeInfo {
+  tube_number: number;
+  tube_color: string;
+  core_range: string;
+  allocation: string;
+}
+
+export interface Tia598SplicePlan {
+  standard: string;
+  fibre_count: number;
+  buffer_tubes: number;
+  cores_per_tube: number;
+  tube_color_range: string;
+  tubes: Tia598TubeInfo[];
+  priority_instruction: string;
+  est_excavation_hours: number;
+  est_fusion_splice_hours: number;
+  est_total_etr_hours: number;
 }
 
 export interface OspGisBundle {
@@ -89,6 +111,11 @@ export interface OtdrKeyEvent {
 
 export interface FaultLocation {
   cable_id?: string;
+  cable_role?: string;
+  cable_fibres?: number;
+  rfts_monitored?: boolean;
+  monitoring_mode?: string;
+  monitoring_label?: string;
   cut_cables?: string[];
   launch_node?: string;
   optical_distance_m?: number;
@@ -97,8 +124,16 @@ export interface FaultLocation {
   helix_factor?: number;
   slack_Coils_subtracted_m?: number;
   corrected_trench_distance_m?: number;
+  rounded_trench_distance_m?: number;
   naive_uncorrected_trench_m?: number;
   dispatch_error_avoided_m?: number;
+  rounded_error_avoided_m?: number;
+  confidence_radius_m?: number;
+  dig_corridor_label?: string;
+  landmark_anchor?: string;
+  google_maps_url?: string;
+  tia598_splice_plan?: Tia598SplicePlan;
+  whatsapp_dispatch_text?: string;
   lat?: number;
   lon?: number;
   naive_lat?: number;
@@ -106,6 +141,7 @@ export interface FaultLocation {
   upstream_manhole?: OspSplice;
   downstream_manhole?: OspSplice;
   distance_from_upstream_manhole_m?: number;
+  rounded_from_upstream_manhole_m?: number;
   fiber_intact?: boolean;
   dying_gasp_confirmed?: boolean;
   dispatch_verdict?: string;
@@ -164,8 +200,15 @@ export interface ImpactedService {
   legs: { leg: string; status: string; cable?: string; och?: string }[];
 }
 
+export interface ProtectionSummary {
+  state: 'PROTECTION_FAILED_SRLG' | 'UNPROTECTED_OUTAGE' | 'AUTO_SWITCHED_SINGLE_THREADED' | 'TRAFFIC_INTACT' | string;
+  badge: string;
+  detail: string;
+}
+
 export interface IncidentImpact {
   currency?: string;
+  protection_summary?: ProtectionSummary;
   impacted_service_count: number;
   complete_outage_count: number;
   total_sla_penalty_per_hour_aed: number;
@@ -346,6 +389,24 @@ export interface RegionOption {
   currency: string;
 }
 
+export interface SuppressedNoiseEvent {
+  id: string;
+  category: string;
+  severity: string;
+  resource_id: string;
+  source_oem: string;
+  reason: string;
+  raw_text: string;
+}
+
+export interface BackgroundNoiseSummary {
+  suppressed_total: number;
+  flapping_transceivers: number;
+  planned_maintenance_crq: number;
+  transient_ran_warnings: number;
+  events: SuppressedNoiseEvent[];
+}
+
 export interface OverviewResponse {
   active_region?: string;
   region_name?: string;
@@ -353,6 +414,7 @@ export interface OverviewResponse {
   map_center?: [number, number];
   map_zoom?: number;
   available_regions?: RegionOption[];
+  background_noise?: BackgroundNoiseSummary;
   connectors: Connector[];
   gis: OspGisBundle;
   topology: Record<string, unknown>;

@@ -467,17 +467,21 @@ export const OspMap: React.FC<OspMapProps> = ({
       // Active Fault Pin
       if (fl && fl.lat && fl.lon) {
         if (fl.naive_lat && fl.naive_lon && fl.dispatch_error_avoided_m > 5) {
+          const errRounded = fl.rounded_error_avoided_m ?? Math.round(fl.dispatch_error_avoided_m);
           const naiveEl = document.createElement('div');
           naiveEl.className =
             'px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 border border-white text-[10px] font-medium shadow-sm whitespace-nowrap';
-          naiveEl.innerHTML = `Raw OTDR (+${fl.dispatch_error_avoided_m}m off)`;
+          naiveEl.innerHTML = `Raw OTDR (~${errRounded}m off)`;
           const naiveMarker = new maplibregl.Marker({ element: naiveEl, offset: [0, -18] })
             .setLngLat([fl.naive_lon, fl.naive_lat])
             .addTo(map);
           markersRef.current.push(naiveMarker);
         }
 
-        let badgeLabel = `Fibre Cut · ${fl.corrected_trench_distance_m ?? 0} m`;
+        const trenchRounded =
+          fl.rounded_trench_distance_m ?? Math.round(fl.corrected_trench_distance_m ?? 0);
+        const radM = fl.confidence_radius_m ?? 20;
+        let badgeLabel = `Dig Zone · ~${trenchRounded.toLocaleString()} m (±${radM} m)`;
         if (fl.dying_gasp_confirmed) badgeLabel = 'Power Outage · Cable Intact';
         else if (fl.dc_bus_voltage_v)
           badgeLabel = `Site Battery Low (${fl.battery_remaining_mins}m left)`;
@@ -582,48 +586,67 @@ export const OspMap: React.FC<OspMapProps> = ({
       </div>
 
       {/* Selected Cable Cut Bar */}
-      {selectedCableId && (
-        <div className="absolute bottom-3 left-3 right-12 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
-          <div className="flex items-center gap-2">
-            <Crosshair className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span className="font-mono font-semibold text-slate-900 dark:text-white">
-              {selectedCableId}
-            </span>
-            <span className="text-slate-500 dark:text-slate-400">
-              Cut at{' '}
-              <strong className="font-mono text-slate-900 dark:text-white">
-                {Math.round(cutRatioSlider * 100)}%
-              </strong>
-            </span>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <input
-              type="range"
-              min={0.15}
-              max={0.88}
-              step={0.01}
-              value={cutRatioSlider}
-              onChange={(e) => setCutRatioSlider(parseFloat(e.target.value))}
-              className="w-24 accent-rose-600 cursor-pointer"
-            />
-            <button
-              onClick={() => onTriggerCutOnCable(selectedCableId, cutRatioSlider)}
-              className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium transition"
-            >
-              Simulate Cut
-            </button>
-            {onClearCable && (
-              <button
-                onClick={onClearCable}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                title="Clear selection"
+      {selectedCableId && (() => {
+        const selCable = (gis?.cables || []).find((c) => c.id === selectedCableId);
+        const isAutoRfts =
+          selCable?.rfts_monitored ?? (selCable?.role === 'trunk' || selCable?.role === 'dark');
+        return (
+          <div className="absolute bottom-3 left-3 right-12 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+            <div className="flex flex-wrap items-center gap-2">
+              <Crosshair className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                {selectedCableId}
+              </span>
+              {selCable?.fibres && (
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  {selCable.fibres}F
+                </span>
+              )}
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  isAutoRfts
+                    ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/70 dark:text-sky-300'
+                    : 'bg-amber-50 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
+                }`}
               >
-                <X className="w-3.5 h-3.5" />
+                {isAutoRfts ? '1625 nm Auto-RFTS' : 'Access Span · Handheld .sor'}
+              </span>
+              <span className="text-slate-500 dark:text-slate-400">
+                Fault at{' '}
+                <strong className="font-mono text-slate-900 dark:text-white">
+                  {Math.round(cutRatioSlider * 100)}%
+                </strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <input
+                type="range"
+                min={0.15}
+                max={0.88}
+                step={0.01}
+                value={cutRatioSlider}
+                onChange={(e) => setCutRatioSlider(parseFloat(e.target.value))}
+                className="w-24 accent-rose-600 cursor-pointer"
+              />
+              <button
+                onClick={() => onTriggerCutOnCable(selectedCableId, cutRatioSlider)}
+                className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium transition"
+              >
+                Replay Cut
               </button>
-            )}
+              {onClearCable && (
+                <button
+                  onClick={onClearCable}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  title="Clear selection"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

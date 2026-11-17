@@ -90,13 +90,15 @@ class PhysicalFiberDuctCutClassifier(HypothesisClassifier):
         fault_loc = locate_fault_on_cable_postgis(primary_cable, opt_dist)
         fault_loc["cut_cables"] = cut_cables
 
+        up_mh = fault_loc["upstream_manhole"]
+        dn_mh = fault_loc["downstream_manhole"]
         summary = (
-            f"Physical fibre break on {', '.join(cut_cables)} localized via 1625nm SR-4731 "
-            f".sor trace at {opt_dist:.1f} m optical -> {fault_loc['corrected_trench_distance_m']} m trench "
-            f"(subtracted {fault_loc['slack_Coils_subtracted_m']} m manhole slack coils & {fault_loc['helix_factor']}x "
-            f"helical factor, avoiding {fault_loc['dispatch_error_avoided_m']} m dispatch error). "
-            f"Pinpointed at ({fault_loc['lat']}, {fault_loc['lon']}) between "
-            f"{fault_loc['upstream_manhole']['manhole_id']} and {fault_loc['downstream_manhole']['manhole_id']}."
+            f"Physical fibre break on {', '.join(cut_cables)} ({fault_loc['monitoring_label']}). "
+            f"Matched splice reflection at {up_mh['manhole_id']} ({up_mh['name']}) -> excavate "
+            f"~{fault_loc['rounded_from_upstream_manhole_m']:,} m (±{fault_loc['confidence_radius_m']} m) "
+            f"along duct toward {dn_mh['manhole_id']} (~{fault_loc['rounded_trench_distance_m']:,} m trench vs "
+            f"{opt_dist:,.0f} m glass; −{round(fault_loc['slack_Coils_subtracted_m'])} m chamber slack & "
+            f"{fault_loc['helix_factor']}x helix removed, avoiding ~{fault_loc['rounded_error_avoided_m']:,} m wrong-pit dig)."
         )
 
         # Dynamically compute optical controller reroute actions for any service-bearing wavelength traversing cut_cables
@@ -132,18 +134,18 @@ class PhysicalFiberDuctCutClassifier(HypothesisClassifier):
                 actions.append(
                     ProposedAction(
                         action_id=f"ACT-OPT-REROUTE-{target_och}",
-                        target_system="Optical SDN Controller",
+                        target_system="Transport Engineering / Optical SDN",
                         connector_id=w.get("controller_id", "ciena_mcp"),
                         action_type="CIENA_WAVELENGTH_REROUTE",
-                        title=f"Re-Provision {w.get('rate', '100G')} Wavelength ({target_och}) over Disjoint Ring ({' -> '.join(alt_path)})",
+                        title=f"Stage {w.get('rate', '100G')} Ring Restoration Work Order ({target_och}: {' -> '.join(alt_path)})",
                         description=(
-                            f"Dynamically computed surviving POP path {' -> '.join(alt_path)} bypassing severed "
-                            f"{', '.join(cut_cables)} via Optical Controller REST API."
+                            f"Pre-validated surviving OMS path {' -> '.join(alt_path)} bypassing severed "
+                            f"{', '.join(cut_cables)} (OSNR & SRLG diversity verified; executes via Optical Controller API on Transport NOC sign-off)."
                         ),
                         payload={
                             "och_id": target_och,
                             "new_path": alt_path,
-                            "reason": f"Automated disjoint ring restoration around severed {', '.join(cut_cables)}",
+                            "reason": f"Transport NOC ring restoration around severed {', '.join(cut_cables)}",
                         },
                     )
                 )

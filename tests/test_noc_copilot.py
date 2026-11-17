@@ -141,6 +141,76 @@ def test_all_seven_scenarios_pgvector_and_storm_benchmark():
             json={"scenario_id": "szr_canal_fibre_cut"},
         )
         assert r1.status_code == 200
+        inc1 = r1.json()["incident"]
+        fl1 = inc1["fault_location"]
+        assert fl1["confidence_radius_m"] in (20, 30)
+        assert fl1["google_maps_url"].startswith("https://www.google.com/maps?q=")
+        assert fl1["tia598_splice_plan"]["standard"] == "ANSI/TIA-598-D"
+        assert "OSP EMERGENCY SPLICE DISPATCH" in fl1["whatsapp_dispatch_text"]
+        assert "protection_summary" in inc1["impact"]
+
         ov = client.get(f"{COPILOT_URL}/api/v1/overview").json()
         assert len(ov["dependency_graph"]["nodes"]) > 10
         assert len(ov["scenarios"]) == 7
+        assert ov["background_noise"]["suppressed_total"] == 38
+        trunk_cables = [c for c in ov["gis"]["cables"] if c["role"] == "trunk"]
+        access_cables = [c for c in ov["gis"]["cables"] if c["role"] == "access"]
+        assert any(c.get("rfts_monitored") is True for c in trunk_cables)
+        assert all(c.get("rfts_monitored") is False for c in access_cables)
+
+
+def test_kml_osp_import_and_csv_alarm_correlation():
+    sample_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test Junction Pit 1</name>
+      <Point><coordinates>55.2610,25.1810,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Field Spur 96F</name>
+      <LineString>
+        <coordinates>
+          55.2520,25.1740,0
+          55.2610,25.1810,0
+          55.2740,25.1915,0
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>"""
+    sample_csv = (
+        "alarm_id,source_oem,layer,resource_id,node_id,severity,specific_problem,optical_distance_m,raw_text\n"
+        "CSV-TEST-1,viavi_onmsi,fibre_osp,CBL-QZ-BB-01,QZ,CRITICAL,OTDR_REFLECTIVE_FIBER_BREAK,5400,\"[CSV] Break on CBL-QZ-BB-01\"\n"
+        "CSV-TEST-2,ciena_mcp,dwdm_optical,OMS-QZ-BB,QZ,CRITICAL,OTS_LOS_LINE_FAIL,,\"[CSV] OTS-LOS QZ->BB\"\n"
+    ).encode("utf-8")
+
+    with httpx.Client(timeout=15.0) as client:
+        r_kml = client.post(
+            f"{COPILOT_URL}/api/v1/import/kml",
+            files={"file": ("field_spur.kml", sample_kml, "application/vnd.google-earth.kml+xml")},
+        )
+        assert r_kml.status_code == 200, r_kml.text
+        kdata = r_kml.json()
+        assert kdata["imported_cable_count"] == 1
+        cid = kdata["primary_cable_id"]
+        assert cid.startswith("KML-")
+
+        # Verify emulator synthesized a real binary SR-4731 .sor trace for the imported KML route
+        r_otdr = client.get(f"{COPILOT_URL}/api/v1/otdr/cable/{cid}")
+        assert r_otdr.status_code == 200
+        assert r_otdr.json()["crc_valid"] is True
+
+        # Verify vendor CSV alarm import correlates into a root-cause incident
+        client.post(f"{COPILOT_URL}/api/v1/faults/reset")
+        r_csv = client.post(
+            f"{COPILOT_URL}/api/v1/import/alarms-csv",
+            files={"file": ("ems_alarms.csv", sample_csv, "text/csv")},
+        )
+        assert r_csv.status_code == 200, r_csv.text
+        cdata = r_csv.json()
+        assert cdata["alarms_imported"] == 2
+        assert cdata["incident"]["root_cause_type"] == "PHYSICAL_FIBRE_CUT"
+
+        # Restore clean UAE baseline so subsequent runs start fresh
+        client.post(f"{COPILOT_URL}/api/v1/region/switch", json={"region_id": "uae_dubai"})

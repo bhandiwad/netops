@@ -132,10 +132,46 @@ def _compute_cluster_impact(
     except Exception:
         pass
 
+    complete_outage_count = sum(1 for s in impacted_services if s["outage_state"] == "COMPLETE_OUTAGE")
+    if impacted_srlg and complete_outage_count > 0:
+        protection_summary = {
+            "state": "PROTECTION_FAILED_SRLG",
+            "badge": "50ms 1+1 Protection Defeated (Shared SRLG)",
+            "detail": (
+                "Primary and standby legs traversed the same severed duct/bridge/chamber, "
+                "leaving <50 ms optical/IP auto-protection with no surviving diverse path."
+            ),
+        }
+    elif complete_outage_count > 0:
+        protection_summary = {
+            "state": "UNPROTECTED_OUTAGE",
+            "badge": "Unprotected Single-Leg Outage",
+            "detail": (
+                "Affected service(s) operate without a diverse 1+1 standby leg; restoration "
+                "requires Transport ring re-provisioning or field fusion splicing."
+            ),
+        }
+    elif impacted_services:
+        protection_summary = {
+            "state": "AUTO_SWITCHED_SINGLE_THREADED",
+            "badge": "<50ms 1+1 Auto-Switched (Surviving Leg Active)",
+            "detail": (
+                "Hardware protection switched customer traffic onto the standby leg in <50 ms, "
+                "but circuits are now running unprotected (single-threaded) until splice repair."
+            ),
+        }
+    else:
+        protection_summary = {
+            "state": "TRAFFIC_INTACT",
+            "badge": "Core SLA Bearers Protected",
+            "detail": "Hardware protection and routing kept enterprise SLA circuits online.",
+        }
+
     impact_bundle = {
         "currency": currency,
+        "protection_summary": protection_summary,
         "impacted_service_count": len(impacted_services),
-        "complete_outage_count": sum(1 for s in impacted_services if s["outage_state"] == "COMPLETE_OUTAGE"),
+        "complete_outage_count": complete_outage_count,
         "total_sla_penalty_per_hour_aed": total_penalty_per_hour_aed,
         "four_hour_sla_exposure_aed": total_penalty_per_hour_aed * 4,
         "impacted_services": impacted_services,
@@ -178,26 +214,34 @@ def _assemble_proposed_actions(
         up_mh = (fl.get("upstream_manhole") or {}).get("manhole_id", "UPSTREAM-MH")
         dn_mh = (fl.get("downstream_manhole") or {}).get("manhole_id", "DOWNSTREAM-MH")
         cid = fl.get("cable_id", hypothesis.root_cause_resource)
+        dist_up = fl.get("rounded_from_upstream_manhole_m", fl.get("distance_from_upstream_manhole_m", 0))
+        rad_m = fl.get("confidence_radius_m", 20)
+        tia = fl.get("tia598_splice_plan") or {}
+        tia_note = (
+            f" {tia.get('standard', 'TIA-598-D')} ({tia.get('tube_color_range', '')}); Est. ETR ~{tia.get('est_total_etr_hours', 4.0)}h."
+            if tia
+            else ""
+        )
         actions.append(
             ProposedAction(
                 action_id="ACT-SNOW-FSM",
                 target_system="ServiceNow Field Service (FSM)",
                 connector_id="servicenow_itsm",
                 action_type="DISPATCH_FIELD_SPLICE_CREW",
-                title=f"Dispatch OSP Fusion-Splice Crew between {up_mh} & {dn_mh}",
+                title=f"Dispatch OSP Splicer Van: {up_mh} (+{dist_up}m ±{rad_m}m -> {dn_mh})",
                 description=(
-                    f"Create ServiceNow Field Work Order (`wm_order`) at slack-corrected coordinates "
-                    f"({fl.get('lat')}, {fl.get('lon')}), {fl.get('distance_from_upstream_manhole_m')} m "
-                    f"downstream of {up_mh}."
+                    f"Create ServiceNow Field Work Order (`wm_order`) anchored at splice chamber {up_mh}, "
+                    f"excavating ~{dist_up} m (±{rad_m} m) toward {dn_mh}.{tia_note}"
                 ),
                 payload={
                     "table": "wm_order",
-                    "short_description": f"Emergency Fusion Splice Repair on {cid} ({up_mh} -> {dn_mh})",
+                    "short_description": f"OSP Fusion Splice Repair on {cid} ({up_mh} +{dist_up}m ±{rad_m}m -> {dn_mh})",
                     "description": hypothesis.summary,
                     "cmdb_ci": cid,
                     "assignment_group": "OSP Field Fibre Splicing Crew Alpha",
                     "location_lat": fl.get("lat"),
                     "location_lon": fl.get("lon"),
+                    "google_maps_url": fl.get("google_maps_url"),
                 },
             )
         )
