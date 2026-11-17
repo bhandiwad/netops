@@ -1,87 +1,72 @@
-# Live Demo Flow & Presenter Guide (12–15 Minute Walkthrough)
+# Plain-Language Live Demo Guide (UAE & India NCR)
 
 > **Print / Shareable PDF Version:** `docs/Live_Demo_Flow_And_Presenter_Guide.pdf`
 
-This guide walks through every scenario and screen you can showcase live across the **Fibre Assurance Console** (`http://127.0.0.1:5173`), the **Multi-OEM Lab Emulator** (`http://127.0.0.1:8001`), and the **Backend OpenAPI Explorer** (`http://127.0.0.1:8002/docs`), with plain-English explanations of what is happening under the hood and verbatim talking points.
+This guide explains the **Pandita — Fibre Assurance** demo in plain, everyday language—without telecom jargon—so anyone can understand the business problem, what is happening on screen, and how to present it smoothly across both **India — Delhi NCR (`INR`)** and **UAE — Dubai Metro (`AED`)**.
 
 ---
 
-## Pre-Demo Setup (30 Seconds Before Sharing Screen)
+## 1. What Problem Does This Solve? (The 30-Second Elevator Pitch)
 
-1. Start the local stack (`./start.sh`) and open **`http://127.0.0.1:5173`**.
-2. Click **`Reset`** in the top bar so network status reads **Healthy**. *(Optional: click the top-right slider icon to enter a Claude or OpenAI API key if you want live LLM narrative generation instead of the built-in offline synthesizer.)*
-3. *(Optional for CTO / Architect calls)* Keep **`http://127.0.0.1:8001`** open in Browser Tab 2 to inspect live ServiceNow, Jira, OGC WFS GeoJSON, and binary `.sor` payloads.
+Telecom operators run thousands of kilometres of underground fibre cables carrying **5G mobile towers**, **bank networks**, and **cloud data centres**. Today, when something breaks, operations teams face four expensive daily headaches:
 
----
+1. **Alarm Floods:** One excavator cutting a single underground cable triggers **dozens or hundreds of separate red alarms** across optical gear, routers, and 5G towers—each on a different vendor's screen. Engineers lose 20–45 minutes just figuring out it is all one physical cut.
+2. **Digging in the Wrong Spot (`150 m – 300 m` Off):** A laser test (`OTDR`) tells you how far light travelled *inside the glass fibre* (say, `11,175 m`), **not** how far to walk along the street. Why? Because underground manholes hold `15 m – 30 m` coils of spare cable slack, and fibres spiral inside the cable jacket. Sending a crew to the raw laser number makes them dig up the wrong stretch of road.
+3. **Wasted Repair Van Trips ("False Cuts"):** Roughly **1 in 3 emergency fibre callouts** isn't a cut cable at all—a building lost electricity, a cell-tower battery ran flat, or heavy monsoon rain weakened a wireless link. Sending a fibre-splicing truck wastes hours and thousands of dollars.
+4. **Hidden "Fake Backup" Routes:** Banks and cloud companies pay top tier for a **Primary + Backup** line. On paper they look separate, but underground both cables quietly pass through the **same bridge or manhole chamber**—meaning a single digger knocks out both lines at once.
 
-## Tailoring the Flow by Operator Profile (Top-Right Selector)
-
-| Audience Archetype | Profile Selector | Lead Scenarios to Emphasise |
-| :--- | :--- | :--- |
-| **Metro Fibre & DCI Operators** | `Pure-Play Metro Fibre, Wavelength & DCI` | Act 1 (Shared-duct audit) -> Act 2 (Canal trunk cut + 100G reroute) -> DIFC Bank shared chamber -> Act 4B (Pre-failure BER). |
-| **Converged National Telcos** | `Converged 4G/5G + Fibre + Enterprise` | Act 2 (13-alarm storm across optical/IP/5G) -> Act 4A (Al Quoz power blackout) -> Act 4C (5G battery drain & 80 GHz rain fade). |
-| **Subsea & Wholesale Carriers** | `Global Subsea, Optical DCI & Wholesale` | Act 1 (Diverse DCI route proof) -> Act 4C (Jebel Ali CLS subsea repeater shunt) -> Act 2 (100G protection switch). |
+**What Pandita Does:** Connects read-only to existing network, map (`GIS`), laser-test (`OTDR`), and customer (`SLA`) systems to **collapse alarm storms into 1 root cause**, **pinpoint the real street dig zone (`±20 m`) with a WhatsApp crew pack & Google Maps pin**, **block wasted truck rolls**, and **expose hidden shared-duct risks before an outage happens**.
 
 ---
 
-## Act 1 — Proactive Route Diversity & Blast-Radius Audit (2 mins)
+## 2. Screen Layout & Region / Customer Switcher (Top Bar)
 
-1. **Click to Open:** On a healthy network, click **`2 shared-duct risks ->`** on the top status bar (or **`Route Diversity`** in the top nav).
-2. **What Happens Under the Hood:** Even before an alarm fires, the graph engine cross-checks BSS customer circuits marked *"Ordered Diverse"* against PostGIS underground street ducts, bridges, and manhole chambers. It flags two Platinum accounts (**Emirates Gulf Bank** and **Jebel Ali Logistics Cloud**) whose primary and backup legs quietly share chamber `J_DG` or the **Dubai Water Canal Bridge**.
-3. **Interactive Dependency Trace:** Hover over any node in the **Duct-to-Customer Dependency Map** to highlight the 5-layer impact chain: `OSP Conduit -> Fibre Trunk -> 100G Optical Channel -> 5G Tower -> Enterprise SLA`.
-4. **What to Say:** *"Enterprise and hyperscale customers pay a premium for dual-homed protection, yet logical circuit inventories rarely verify street-level civil ducts. Before any outage happens, we expose hidden single points of failure—and let pre-sales verify truly diverse DCI/RFP paths in seconds instead of days."*
+Open **`http://127.0.0.1:5173`**. Everything lives in one clean workspace:
 
----
-
-## Act 2 — Street-Accurate Fibre-Cut Pinpointing & Gated Recovery (3.5 mins)
-
-1. **Trigger Incident:** Click **`Operations`**, select **`Metro Trunk Fibre Cut + Hidden SRLG Backup Failure (Sheikh Zayed Rd Canal)`**, and click **`Simulate`**.
-2. **Multi-Vendor Storm Collapse:** Point to **`13 alarms -> 1 root cause`** (`97%` confidence). Optical LOS (Ciena), router BFD drops (Cisco/Juniper), VIAVI OTDR, and 3 cascading 5G sites (`BB_HUB`, `BB_T1`, `BB_T2`) collapse onto trunk cable `CBL-QZ-BB-01`, surfacing **`AED 25,000/hr`** SLA exposure immediately.
-3. **Raw Glass vs. Street Trench GPS (`239 m` Saved):** Contrast the amber pin (**`Raw OTDR (+239m off)`**) against the pulsing red pin (**`Fibre Cut · 10934.4 m`**).
-   - *Under-the-hood physics:* Raw OTDR measures optical flight through glass (`11,173.4 m`), which includes `75 m` of repair slack coiled inside upstream manholes plus `1.015x` helical twist inside the cable jacket. Subtracting both pinpoints the exact dig spot between `MH-J_I2` and `MH-J_I1`.
-4. **Human-Approved Execution:** Review the 3 staged actions on the right (**Jira** master ticket, **ServiceNow FSM** splice crew dispatch with exact GPS, and **Optical SDN Controller** 100G wavelength reroute `JBL -> QZ -> DSO -> BB -> DIFC`). Click **`Approve all`** to execute live while emphasising human NOC control.
-5. **Inspect Binary `.sor` Trace & Vector RAG (1.5 mins):**
-   - Click **`Open OTDR trace ->`** below the map to show the real `1625 nm` Telcordia SR-4731 `.sor` step-drop at `11,173.4 m`, the **Glass-to-Street Distance** breakdown, and expandable splice events.
-   - Expand **`Runbook & engineering notes`** at the bottom right to show the `pgvector`-matched carrier SOP (`RB-OSP-001`) and past resolved ticket MTTR benchmarks.
+- **Top-Right Region Selector (`Globe` icon):** Switch live between:
+  - **`India · Delhi NCR (INR)`** — Connaught Place, Nehru Place, Gurgaon Cyber City, Aerocity, Noida, Greater Noida, and Yamuna bridges (**DND Flyway** & **ITO Barrage**), with two customer profiles:
+    1. *Metro Fibre & DCI (India)* — Wholesale dark fibre, hyperscale AI data-centre interconnects, and BFSI leased lines (`INR 450,000/hr` Platinum SLA).
+    2. *Converged 4G/5G & Fibre (India)* — 5G towers, metro fibre, home/enterprise broadband, and `80 GHz` wireless hops.
+  - **`UAE · Dubai (AED)`** — Sheikh Zayed Rd, Business Bay, DIFC, Al Quoz, Silicon Oasis, and Jebel Ali Subsea Landing Station, with *Converged 4G/5G + Fibre* and *Subsea & DCI Wholesale* profiles.
+- **Top Operational Posture Strip:**
+  - Shows **`0 P1/P2 Incidents · 38 minor/CRQ suppressed`** when healthy—reflecting real NOC life where planned maintenance windows (`CHG`) and harmless dirty-connector warnings are muted automatically (click the pill to inspect all 38 muted background events).
+  - **`Import KML / .sor / CSV`:** Upload a real **Google Earth `.kml` fibre route**, a **handheld `.sor` laser trace**, or an **alarm `.csv` export** live during a prospect call (includes 1-click sample `.kml` and `.csv` loaders).
+  - **`Lab Replay`:** Pick any real-world fault scenario and click **`Replay`** (or **`Reset`** to return to healthy).
 
 ---
 
-## Act 3 — Proving Zero Hardcoding: Ad-Hoc Map Cut & `.sor` Round-Trip (1.5 mins)
+## 3. Step-by-Step Plain-Language Demo Flow (8–10 Minutes)
 
-1. Click **`Reset`** -> open the **`Map`** sub-tab -> **click any fibre cable directly on the street map**.
-2. Drag the cut-position slider (`15%–88%`) to any random spot and click **`Simulate Cut`**. The emulator synthesises a brand-new binary `.sor` trace at that exact metre mark, PostGIS walks upstream manholes dynamically, and NetworkX computes a fresh surviving optical path.
-3. On **`OTDR Trace`**, click **`.sor`** to download the raw binary trace to your laptop, then click **`Upload .sor`** to re-parse the raw bytes live.
+### Step 1 — Expose Hidden "Fake Backup" Routes Before Any Outage (`Route Diversity`)
+1. Click **`shared-duct risks ->`** in the top bar (or **`Route Diversity`** in the top navigation).
+2. **In plain English:** Point out the bank and cloud circuits marked *"Ordered Diverse"*. Although sold as independent primary and backup lines, the map audit proves both cables share the **same underground chamber or river bridge** (e.g., **Connaught Place Janpath Chamber / DND Flyway** in India, or **DIFC Gate / Water Canal Bridge** in UAE).
+3. **Why buyers care:** Lets operators fix single points of failure *before* a VIP bank goes dark, and lets pre-sales engineers verify truly separate routes for new customer bids in seconds.
 
----
+### Step 2 — One Backhoe Cut, Multi-Vendor Storm, Exact Dig Zone (`Operations`)
+1. Switch back to **`Operations`**, pick the first scenario (*Metro Trunk Fibre Cut...*), and click **`Replay`**.
+2. **Watch the Arrival Cascade:** Notice the banner showing how alarms arrive in real life: `t+0ms` physical laser loss -> `t+180ms` core router drop -> `t+1.2s` cascading 5G cell sites & enterprise SLAs—all collapsed automatically into **1 root cause**.
+3. **Compare the Two Pins on the Map:**
+   - **Amber Pin (`Raw OTDR ~210m off`):** Where a crew would dig if they trusted the raw laser distance—missing the break by two city blocks because of coiled spare cable inside upstream manholes.
+   - **Red Pulsing Pin (`Dig Zone · ±20 m`):** The true street excavation corridor after subtracting manhole slack coils and cable twist, anchored to the nearest upstream manhole landmark.
+4. **Show the Field Splicer & WhatsApp Dispatch Pack (Right Panel):**
+   - Point to the **Hardware Protection Banner** explaining whether `<50 ms` automatic backup held or failed due to a shared bridge/duct.
+   - Click **`Copy WhatsApp Dispatch`** (formats the exact manhole landmark, `±20 m` dig instruction, priority fibre tube colour, and Google Maps GPS link ready to paste into the field contractor's WhatsApp group) and **`Google Maps Pin`**.
+   - Expand **`ANSI/TIA-598-D Tube & Core Plan`** (`Tube 1 Blue -> Tube 12 Aqua`) showing which colour-coded fibre tube to splice first and the realistic repair ETR (`~4.0h`).
+5. **Human-in-the-Loop Sign-Off:** Click **`Approve all`** under **Engineering & ITSM Work Orders** to log the **Jira** master incident, create the **ServiceNow** field dispatch ticket, and execute the pre-validated **Transport Ring Restoration Work Order**.
 
-## Act 4 — Stopping Wasted Truck Rolls, Pre-Outage BER & Subsea Watch (4 mins)
+### Step 3 — Stop Wasted Truck Rolls ("Power Cut, Not Fibre Cut")
+1. Select the **Premises Power Blackout ('Dying Gasp')** scenario in **`Lab Replay`** and click **`Replay`**.
+2. **In plain English:** 24–28 customer modems in an industrial estate went offline at the exact same second—which normally looks just like a severed street cable.
+3. Pandita checks two facts automatically: *(a)* the modems sent a tiny "last-breath" power-loss signal (`dying gasp`) right as electricity died, and *(b)* an automatic laser test down the fibre proves the glass is **100% unbroken**.
+4. Result: **`Dig zone: Trip saved`**—no splicing van is dispatched at 2 AM, and an automated power-outage notice is logged instead.
 
-Up to 35% of emergency fibre callouts arrive on site to find the fibre intact—caused instead by customer power loss, tower battery drain, or heavy rain. Walk through these scenarios:
+### Step 4 — Catching Problems *Before* Outage + 5G Tower & Subsea Watch
+1. **Pinched Fibre Warning (*Pre-Failure DWDM...*):** Shows a fibre being crushed or bent inside a manhole. Customer traffic is still up (`0/hr` penalty), and Pandita stages a preventative traffic shift before the signal drops off a cliff.
+2. **5G Batteries, Monsoon Rain & Subsea Cables (`Sites & Subsea` tab):**
+   - **Battery Drain:** Tracks a 5G hub site running on backup batteries after a grid cut (`36 mins` left) so a mobile generator arrives before 9 downstream 5G sectors go dark.
+   - **Monsoon / Heavy Rain Wireless Fade:** Recognises heavy rain weakening an `80 GHz` wireless link so engineers don't climb towers to replace healthy radios.
+   - **Subsea Cable Fault:** Separates an undersea power-insulation leak (`km` offshore from Mumbai/chennai or Jebel Ali landing station) from land-side fibre cuts.
 
-1. **4A. Building Power Blackout vs. Fibre Cut (`Premises Power Blackout ('Dying Gasp') ... Al Quoz`):**
-   - *Explanation:* 24 ONTs/modems drop within 1 second. Correlating `ITU-T G.984` `dying-gasp` power-fail frames (`>=80%` cohort match) with a clean `1625 nm` OTDR continuity shot (`Fibre intact`) marks **`Field accuracy: Trip saved`**, suppressing the splice crew and logging a power advisory instead.
-2. **4B. Proactive Pre-Failure Optical BER (`Pre-Failure DWDM Optical OSNR & Pre-FEC BER Degradation`):**
-   - *Explanation:* Catches Pre-FEC BER crossing `1e-4` alongside a non-reflective `1.8 dB` splice pinch while Post-FEC errors are still `0` (`AED 0/hr` outage), staging a hitless wavelength switch before the circuit drops.
-3. **4C. 5G Battery Countdown, 80 GHz Rain Fade & Subsea Shunts (`Sites & Subsea` tab):**
-   - **`Test Battery Drain`** — Tracks DC voltage slope on `gNB-BB-01` toward the `43.2 V` cutoff (`36 min` reserve) and dispatches a mobile generator before 9 daisy-chained 5G cells go dark.
-   - **`Test Rain Fade`** — Recognises `-38.2 dBm` RSL fade & `1024QAM -> QPSK` downshift on an `80 GHz` E-band hop during heavy rain so nobody rolls tower climbers to swap healthy radios.
-   - **`Test Subsea Fault`** — Isolates a `+4120 V` PFE drop & C-OTDR repeater shunt (`14.2 km` offshore from Jebel Ali CLS) on **FALCON-X Gulf Subsea Express**, separating submarine faults from terrestrial fibre cuts.
-4. **Bonus Banking Scenario (`Dual-Homed Bank HQ Outage via Shared Manhole Chamber — DIFC Gate`):**
-   - Shows civil works breaching chamber `J_DG` and severing both primary and "diverse" backup L3VPN legs for **Emirates Gulf Bank**, visually reinforcing Act 1's shared-duct audit.
-
----
-
-## Act 5 — Multi-OEM Integrations, 10k-Alarm Scale Test & Wire Proof (2 mins)
-
-1. Click **`Integrations`** in the top nav to show all **12 standards-based vendor adapters** (`Ciena MCP`, `Nokia NSP`, `VIAVI ONMSi`, `EXFO Nova`, `Lepton GIS`, `Ericsson ENM`, `Cisco/Juniper`, `NetBox`, `Comviva BSS`, `NMSWorks`, `ServiceNow FSM`, `Jira SM`). Click **`Edit`** on any card to show zero-code cutover from `emulator` to a `live` carrier endpoint.
-2. Click **`Run 10,000-Alarm Test`** at the bottom to benchmark real-time deduplication, flap suppression, and causal graph clustering in milliseconds.
-3. *(Optional)* Switch to Tab 2 (**`http://127.0.0.1:8001`**) and open `/servicenow/api/now/table/wm_order` or `/jira/rest/api/3/issue` to verify the real JSON tickets created when you clicked **Approve all** in Act 2.
-
----
-
-## Presenter Q&A Cheat Sheet
-
-- **"Does AI guess the fault GPS or optical backup route?"** — Never. Coordinates, manhole slack subtraction, and Zero-SRLG backup paths are computed deterministically by binary `SR-4731 (.sor)` math, `PostGIS`, and `NetworkX`. AI handles signal anomaly detection, multi-step tool orchestration, `pgvector` SOP retrieval, RFP parsing, and cited EN/AR reporting.
-- **"Can we run this air-gapped inside our own NOC?"** — Yes. Deploys in `Docker` or `Kubernetes (OpenShift)` on-prem with zero subscriber PII, supporting cloud APIs (`Claude Sonnet 4` / `GPT-4o`), self-hosted open-weight models (`Llama 3.3` / `Qwen 2.5` via `vLLM`), or a CPU-only fallback.
-- **"Will it push changes to live gear automatically?"** — No. Day-1 deployment is strictly read-only; northbound reroutes and dispatches are staged as drafts behind explicit NOC engineer sign-off.
-- **"What if our GIS manhole slack data isn't clean everywhere?"** — We start with a **4-week single-corridor pilot** on one priority metro ring or DCI route, calibrating chamber slack records incrementally as field splices are verified.
+### Step 5 — Prove Nothing Is Fake: Cut Any Cable & Import Your Own `.kml` / `.csv`
+1. Click **`Reset`**, click **any fibre cable directly on the map** (notice core trunks say **`1625 nm Auto-RFTS`** while last-mile drops say **`Access Span · Handheld .sor`**), slide the fault position anywhere (`15%–88%`), and click **`Replay Cut`**. Everything recalculates live.
+2. Click **`Import KML / .sor / CSV`** in the top bar and click **`Sample .kml`** (or drop any Google Earth `.kml` file) to watch a brand-new fibre route appear live on the map with automatic manhole slack modelling and `.sor` trace support.

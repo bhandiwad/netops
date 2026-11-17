@@ -399,8 +399,8 @@ async def correlate_alarms_into_incidents(raw_alarms: list[dict[str, Any]]) -> l
 
         with get_conn() as conn:
             with conn.cursor() as cur:
-                for a in cluster.alarms:
-                    cur.execute(
+                stmts: list[bytes] = [
+                    cur.mogrify(
                         """
                         INSERT INTO alarms (
                             alarm_id, incident_id, scenario_id, source_oem, protocol, layer,
@@ -427,48 +427,53 @@ async def correlate_alarms_into_incidents(raw_alarms: list[dict[str, Any]]) -> l
                             json.dumps(a.extra),
                         ),
                     )
-                cur.execute(
-                    """
-                    INSERT INTO incidents (
-                        incident_id, title, status, severity, root_cause_type, root_cause_resource,
-                        root_cause_summary, confidence, alarm_count, fault_location_json,
-                        impact_json, srlg_findings_json, otdr_trace_json, ai_copilot_json,
-                        proposed_actions_json, executed_actions_json, updated_at
+                    for a in cluster.alarms
+                ]
+                stmts.append(
+                    cur.mogrify(
+                        """
+                        INSERT INTO incidents (
+                            incident_id, title, status, severity, root_cause_type, root_cause_resource,
+                            root_cause_summary, confidence, alarm_count, fault_location_json,
+                            impact_json, srlg_findings_json, otdr_trace_json, ai_copilot_json,
+                            proposed_actions_json, executed_actions_json, updated_at
+                        )
+                        VALUES (%s, %s, 'PENDING_APPROVAL', 'CRITICAL', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '[]'::jsonb, NOW())
+                        ON CONFLICT (incident_id) DO UPDATE SET
+                            title = EXCLUDED.title,
+                            status = 'PENDING_APPROVAL',
+                            root_cause_type = EXCLUDED.root_cause_type,
+                            root_cause_resource = EXCLUDED.root_cause_resource,
+                            root_cause_summary = EXCLUDED.root_cause_summary,
+                            confidence = EXCLUDED.confidence,
+                            alarm_count = EXCLUDED.alarm_count,
+                            fault_location_json = EXCLUDED.fault_location_json,
+                            impact_json = EXCLUDED.impact_json,
+                            srlg_findings_json = EXCLUDED.srlg_findings_json,
+                            otdr_trace_json = EXCLUDED.otdr_trace_json,
+                            ai_copilot_json = EXCLUDED.ai_copilot_json,
+                            proposed_actions_json = EXCLUDED.proposed_actions_json,
+                            executed_actions_json = '[]'::jsonb,
+                            updated_at = NOW()
+                        """,
+                        (
+                            incident_id,
+                            hypothesis.title,
+                            hypothesis.root_cause_type,
+                            hypothesis.root_cause_resource,
+                            hypothesis.summary,
+                            hypothesis.confidence,
+                            len(cluster.alarms),
+                            json.dumps(hypothesis.fault_location),
+                            json.dumps(impact_bundle),
+                            json.dumps(impacted_srlg),
+                            json.dumps(hypothesis.otdr_trace_data),
+                            json.dumps(ai_copilot),
+                            json.dumps(proposed_actions),
+                        ),
                     )
-                    VALUES (%s, %s, 'PENDING_APPROVAL', 'CRITICAL', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '[]'::jsonb, NOW())
-                    ON CONFLICT (incident_id) DO UPDATE SET
-                        title = EXCLUDED.title,
-                        status = 'PENDING_APPROVAL',
-                        root_cause_type = EXCLUDED.root_cause_type,
-                        root_cause_resource = EXCLUDED.root_cause_resource,
-                        root_cause_summary = EXCLUDED.root_cause_summary,
-                        confidence = EXCLUDED.confidence,
-                        alarm_count = EXCLUDED.alarm_count,
-                        fault_location_json = EXCLUDED.fault_location_json,
-                        impact_json = EXCLUDED.impact_json,
-                        srlg_findings_json = EXCLUDED.srlg_findings_json,
-                        otdr_trace_json = EXCLUDED.otdr_trace_json,
-                        ai_copilot_json = EXCLUDED.ai_copilot_json,
-                        proposed_actions_json = EXCLUDED.proposed_actions_json,
-                        executed_actions_json = '[]'::jsonb,
-                        updated_at = NOW()
-                    """,
-                    (
-                        incident_id,
-                        hypothesis.title,
-                        hypothesis.root_cause_type,
-                        hypothesis.root_cause_resource,
-                        hypothesis.summary,
-                        hypothesis.confidence,
-                        len(cluster.alarms),
-                        json.dumps(hypothesis.fault_location),
-                        json.dumps(impact_bundle),
-                        json.dumps(impacted_srlg),
-                        json.dumps(hypothesis.otdr_trace_data),
-                        json.dumps(ai_copilot),
-                        json.dumps(proposed_actions),
-                    ),
                 )
+                cur.execute(b";\n".join(stmts))
 
         log_audit(
             actor="correlation_pipeline",

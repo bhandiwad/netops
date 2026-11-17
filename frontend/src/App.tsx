@@ -34,7 +34,7 @@ const LazyTopologyView = lazy(() =>
   import('./views/TopologyView').then((m) => ({ default: m.TopologyView }))
 );
 
-const OVERVIEW_CACHE_KEY = 'noc_overview_cache_v2';
+const OVERVIEW_CACHE_KEY = 'noc_overview_cache_v3';
 
 function loadCachedOverview(): OverviewResponse | null {
   try {
@@ -125,7 +125,8 @@ export const App: React.FC = () => {
     { region_id: 'uae_dubai', label: 'UAE — Dubai Metro', short_label: 'UAE · Dubai', currency: 'AED' },
     { region_id: 'india_ncr', label: 'India — Delhi NCR', short_label: 'India · Delhi NCR', currency: 'INR' },
   ];
-  const activeRegionId = overview?.active_region || 'uae_dubai';
+  const [pendingRegionId, setPendingRegionId] = useState<string | null>(null);
+  const activeRegionId = pendingRegionId || overview?.active_region || 'uae_dubai';
 
   useEffect(() => {
     const profileIds = Object.keys(profiles);
@@ -141,8 +142,13 @@ export const App: React.FC = () => {
   }, [scenarios.map((s) => s.id).join(',')]);
 
   const handleSwitchRegion = async (regionId: string) => {
-    if (regionId === activeRegionId) return;
+    setPendingRegionId(regionId);
     setBusyAction('Switching region...');
+    try {
+      sessionStorage.removeItem(OVERVIEW_CACHE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
     try {
       await nocApi.switchRegion(regionId);
       setSelectedIncidentId(null);
@@ -150,8 +156,11 @@ export const App: React.FC = () => {
       setSelectedCableId(null);
       setXmlPreview(null);
       setBenchmarkResult(null);
-      await refreshOverview();
+    } catch (e) {
+      console.error('Region switch failed:', e);
     } finally {
+      await refreshOverview();
+      setPendingRegionId(null);
       setBusyAction(null);
     }
   };

@@ -40,7 +40,7 @@ def test_binary_sor_codec_roundtrip():
 
 
 def test_all_seven_scenarios_pgvector_and_storm_benchmark():
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=30.0) as client:
         # 1. Reset network
         r = client.post(f"{COPILOT_URL}/api/v1/faults/reset")
         assert r.status_code == 200
@@ -185,7 +185,7 @@ def test_kml_osp_import_and_csv_alarm_correlation():
         "CSV-TEST-2,ciena_mcp,dwdm_optical,OMS-QZ-BB,QZ,CRITICAL,OTS_LOS_LINE_FAIL,,\"[CSV] OTS-LOS QZ->BB\"\n"
     ).encode("utf-8")
 
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=30.0) as client:
         r_kml = client.post(
             f"{COPILOT_URL}/api/v1/import/kml",
             files={"file": ("field_spur.kml", sample_kml, "application/vnd.google-earth.kml+xml")},

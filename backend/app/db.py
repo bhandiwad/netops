@@ -28,23 +28,24 @@ DEFAULT_EMULATOR_BASE = os.getenv("NOC_EMULATOR_BASE_URL", "http://127.0.0.1:800
 RUNBOOKS_FILE = Path(__file__).resolve().parent / "knowledge" / "runbooks.json"
 
 _DB_POOL: psycopg2.pool.ThreadedConnectionPool | None = None
+_CONN_LAST_USED: dict[int, float] = {}
 
 _CONNECT_KWARGS: dict[str, Any] = {
     "dsn": DB_DSN,
     "cursor_factory": psycopg2.extras.RealDictCursor,
     "connect_timeout": 20,
     "keepalives": 1,
-    "keepalives_idle": 10,
-    "keepalives_interval": 3,
+    "keepalives_idle": 6,
+    "keepalives_interval": 2,
     "keepalives_count": 3,
-    "options": "-c statement_timeout=15000",
+    "options": "-c synchronous_commit=off -c statement_timeout=15000",
 }
 
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     global _DB_POOL
     if _DB_POOL is None or _DB_POOL.closed:
-        _DB_POOL = psycopg2.pool.ThreadedConnectionPool(2, 20, **_CONNECT_KWARGS)
+        _DB_POOL = psycopg2.pool.ThreadedConnectionPool(1, 10, **_CONNECT_KWARGS)
     return _DB_POOL
 
 
@@ -52,16 +53,20 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
 def get_conn() -> Iterator[Any]:
     pool = _get_pool()
     conn = pool.getconn()
-    if conn.closed:
+    now = time.monotonic()
+    last_used = _CONN_LAST_USED.get(id(conn))
+    # Evict secondary LIFO sockets that sat idle across Docker Desktop gVisor NAT window
+    if conn.closed or (last_used is not None and (now - last_used) > 12.0):
+        _CONN_LAST_USED.pop(id(conn), None)
         pool.putconn(conn, close=True)
-        conn = psycopg2.connect(**_CONNECT_KWARGS)
-        pooled = False
-    else:
-        pooled = True
+        conn = pool.getconn()
+    pooled = True
     try:
         yield conn
         conn.commit()
+        _CONN_LAST_USED[id(conn)] = time.monotonic()
     except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _CONN_LAST_USED.pop(id(conn), None)
         if pooled:
             pool.putconn(conn, close=True)
             pooled = False
@@ -72,8 +77,9 @@ def get_conn() -> Iterator[Any]:
         if not conn.closed:
             try:
                 conn.rollback()
+                _CONN_LAST_USED[id(conn)] = time.monotonic()
             except Exception:
-                pass
+                _CONN_LAST_USED.pop(id(conn), None)
         raise
     finally:
         if pooled:

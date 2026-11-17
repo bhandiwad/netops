@@ -21,39 +21,41 @@ def _now_iso() -> str:
 
 
 def load_normalized_inventory() -> dict[str, Any]:
-    """Load complete normalized 6-layer network inventory from PostgreSQL."""
+    """Load complete normalized 6-layer network inventory from PostgreSQL in ONE single SQL round-trip."""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM network_nodes")
-            nodes = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT id, node_a, node_b, bridge, trench_length_m, coords_json FROM osp_ducts")
-            ducts = {r["id"]: dict(r) for r in cur.fetchall()}
             cur.execute(
                 """
-                SELECT id, path_nodes, duct_ids, bridges, fibres, role,
-                       helix_factor, trench_length_m, optical_length_m, splices_json, coords_json
-                FROM osp_cables
+                SELECT json_build_object(
+                    'nodes', COALESCE((SELECT json_agg(t) FROM (SELECT id, name, kind, lat, lon, router_json, optical_json FROM network_nodes) t), '[]'::json),
+                    'ducts', COALESCE((SELECT json_agg(t) FROM (SELECT id, node_a, node_b, bridge, trench_length_m, coords_json FROM osp_ducts) t), '[]'::json),
+                    'cables', COALESCE((SELECT json_agg(t) FROM (SELECT id, path_nodes, duct_ids, bridges, fibres, role, helix_factor, trench_length_m, optical_length_m, splices_json, coords_json FROM osp_cables) t), '[]'::json),
+                    'oms_links', COALESCE((SELECT json_agg(t) FROM oms_links t), '[]'::json),
+                    'wavelengths', COALESCE((SELECT json_agg(t) FROM optical_channels t), '[]'::json),
+                    'ip_links', COALESCE((SELECT json_agg(t) FROM ip_links t), '[]'::json),
+                    'ran_sites', COALESCE((SELECT json_agg(t) FROM (SELECT id, name, vendor, controller_id, pop_anchor, hub_site_id, backhaul_type, backhaul_cable_id, mw_link_id, cells_json, downstream_tails_json, battery_backup_hours, lat, lon, pm_json FROM ran_sites) t), '[]'::json),
+                    'gpon_clusters', COALESCE((SELECT json_agg(t) FROM gpon_clusters t), '[]'::json),
+                    'subsea_cables', COALESCE((SELECT json_agg(t) FROM subsea_cables t), '[]'::json),
+                    'sla_tiers', COALESCE((SELECT json_agg(t) FROM sla_tiers t), '[]'::json),
+                    'customers', COALESCE((SELECT json_agg(t) FROM customers t), '[]'::json),
+                    'services', COALESCE((SELECT json_agg(t) FROM customer_services t), '[]'::json)
+                ) AS bundle
                 """
             )
-            cables = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM oms_links")
-            oms_links = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM optical_channels")
-            wavelengths = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM ip_links")
-            ip_links = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM ran_sites")
-            ran_sites = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM gpon_clusters")
-            gpon_clusters = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM subsea_cables")
-            subsea_cables = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM sla_tiers")
-            sla_tiers = {r["tier_name"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM customers")
-            customers = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM customer_services")
-            services = [dict(r) for r in cur.fetchall()]
+            bundle = (cur.fetchone() or {}).get("bundle") or {}
+
+    nodes = {r["id"]: r for r in bundle.get("nodes", [])}
+    ducts = {r["id"]: r for r in bundle.get("ducts", [])}
+    cables = {r["id"]: r for r in bundle.get("cables", [])}
+    oms_links = bundle.get("oms_links", [])
+    wavelengths = {r["id"]: r for r in bundle.get("wavelengths", [])}
+    ip_links = bundle.get("ip_links", [])
+    ran_sites = {r["id"]: r for r in bundle.get("ran_sites", [])}
+    gpon_clusters = {r["id"]: r for r in bundle.get("gpon_clusters", [])}
+    subsea_cables = {r["id"]: r for r in bundle.get("subsea_cables", [])}
+    sla_tiers = {r["tier_name"]: r for r in bundle.get("sla_tiers", [])}
+    customers = {r["id"]: r for r in bundle.get("customers", [])}
+    services = bundle.get("services", [])
 
     oms_by_pair: dict[tuple[str, str], str] = {}
     for oms in oms_links:

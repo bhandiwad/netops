@@ -25,6 +25,7 @@ from .adapters.registry import (
     DatabaseBackedOtdrAdapter,
     get_connectors_map,
     get_emulator_control_base_url,
+    invalidate_connectors_cache,
     sync_all_connectors,
 )
 from .correlation import (
@@ -138,9 +139,9 @@ class _SnmpTrapUdpProtocol(asyncio.DatagramProtocol):
 
 
 async def _db_pool_keepalive_worker() -> None:
-    """Keep pooled PostgreSQL sockets warm across Docker Desktop gVisor NAT idle windows."""
+    """Keep primary pooled PostgreSQL socket warm (<12s idle) across Docker Desktop gVisor NAT windows."""
     while True:
-        await asyncio.sleep(15.0)
+        await asyncio.sleep(8.0)
         try:
             with get_conn() as conn:
                 with conn.cursor() as cur:
@@ -217,54 +218,54 @@ async def get_overview() -> dict[str, Any]:
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM connectors ORDER BY id")
-            connectors = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT id, node_a, node_b, bridge, trench_length_m, coords_json FROM osp_ducts ORDER BY id")
-            ducts = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT id, node_id, name, kind, lat, lon, slack_coil_m FROM osp_manholes ORDER BY id")
-            manholes = [dict(r) for r in cur.fetchall()]
             cur.execute(
                 """
-                SELECT id, path_nodes, duct_ids, bridges, fibres, role,
-                       helix_factor, trench_length_m, optical_length_m, splices_json, coords_json
-                FROM osp_cables ORDER BY id
+                SELECT json_build_object(
+                    'connectors', COALESCE((SELECT json_agg(t) FROM (SELECT * FROM connectors ORDER BY id) t), '[]'::json),
+                    'ducts', COALESCE((SELECT json_agg(t) FROM (SELECT id, node_a, node_b, bridge, trench_length_m, coords_json FROM osp_ducts ORDER BY id) t), '[]'::json),
+                    'manholes', COALESCE((SELECT json_agg(t) FROM (SELECT id, node_id, name, kind, lat, lon, slack_coil_m FROM osp_manholes ORDER BY id) t), '[]'::json),
+                    'cables', COALESCE((SELECT json_agg(t) FROM (SELECT id, path_nodes, duct_ids, bridges, fibres, role, helix_factor, trench_length_m, optical_length_m, splices_json, coords_json FROM osp_cables ORDER BY id) t), '[]'::json),
+                    'tstates', COALESCE((SELECT json_object_agg(key, payload) FROM topology_state), '{}'::json),
+                    'inc_rows', COALESCE((SELECT json_agg(t) FROM (SELECT * FROM incidents ORDER BY updated_at DESC) t), '[]'::json),
+                    'alarms', COALESCE((SELECT json_agg(t) FROM (SELECT * FROM alarms ORDER BY raised_at DESC LIMIT 200) t), '[]'::json),
+                    'runbooks', COALESCE((SELECT json_agg(t) FROM (SELECT id, title, domain, oem_tags, symptoms, procedure_md, past_tickets_json FROM runbooks ORDER BY id) t), '[]'::json),
+                    'audits', COALESCE((SELECT json_agg(t) FROM (SELECT * FROM audit_log ORDER BY id DESC LIMIT 40) t), '[]'::json),
+                    'net_nodes', COALESCE((SELECT json_agg(t) FROM (SELECT id, name, kind, lat, lon, router_json, optical_json FROM network_nodes) t), '[]'::json),
+                    'oms_links', COALESCE((SELECT json_agg(t) FROM oms_links t), '[]'::json),
+                    'wavelengths', COALESCE((SELECT json_agg(t) FROM optical_channels t), '[]'::json),
+                    'ip_links', COALESCE((SELECT json_agg(t) FROM ip_links t), '[]'::json),
+                    'ran_sites', COALESCE((SELECT json_agg(t) FROM (SELECT id, name, vendor, controller_id, pop_anchor, hub_site_id, backhaul_type, backhaul_cable_id, mw_link_id, cells_json, downstream_tails_json, battery_backup_hours, lat, lon, pm_json FROM ran_sites) t), '[]'::json),
+                    'gpon_clusters', COALESCE((SELECT json_agg(t) FROM gpon_clusters t), '[]'::json),
+                    'subsea_cables', COALESCE((SELECT json_agg(t) FROM subsea_cables t), '[]'::json),
+                    'sla_tiers', COALESCE((SELECT json_agg(t) FROM sla_tiers t), '[]'::json),
+                    'customers', COALESCE((SELECT json_agg(t) FROM customers t), '[]'::json),
+                    'rfts_rows', COALESCE((SELECT json_agg(t) FROM (SELECT id, vendor, pop_node, monitored_cables_json FROM rfts_units) t), '[]'::json),
+                    'services', COALESCE((SELECT json_agg(t) FROM customer_services t), '[]'::json)
+                ) AS bundle
                 """
             )
-            cables = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT key, payload FROM topology_state")
-            tstates = {r["key"]: r["payload"] for r in cur.fetchall()}
-            cur.execute("SELECT * FROM incidents ORDER BY updated_at DESC")
-            inc_rows = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM alarms ORDER BY raised_at DESC LIMIT 200")
-            alarms = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT id, title, domain, oem_tags, symptoms, procedure_md, past_tickets_json FROM runbooks ORDER BY id")
-            runbooks = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 40")
-            audits = [dict(r) for r in cur.fetchall()]
+            bundle = (cur.fetchone() or {}).get("bundle") or {}
 
-            # Normalized inventory tables in the SAME single checkout (zero extra pool round-trips!)
-            cur.execute("SELECT * FROM network_nodes")
-            net_nodes = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM oms_links")
-            oms_links = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM optical_channels")
-            wavelengths = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM ip_links")
-            ip_links = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM ran_sites")
-            ran_sites = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM gpon_clusters")
-            gpon_clusters = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM subsea_cables")
-            subsea_cables = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM sla_tiers")
-            sla_tiers = {r["tier_name"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT * FROM customers")
-            customers = {r["id"]: dict(r) for r in cur.fetchall()}
-            cur.execute("SELECT id, vendor, pop_node, monitored_cables_json FROM rfts_units")
-            rfts_rows = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT * FROM customer_services")
-            services = [dict(r) for r in cur.fetchall()]
+    connectors = bundle.get("connectors", [])
+    ducts = bundle.get("ducts", [])
+    manholes = bundle.get("manholes", [])
+    cables = bundle.get("cables", [])
+    tstates = bundle.get("tstates", {})
+    inc_rows = bundle.get("inc_rows", [])
+    alarms = bundle.get("alarms", [])
+    runbooks = bundle.get("runbooks", [])
+    audits = bundle.get("audits", [])
+    net_nodes = {r["id"]: r for r in bundle.get("net_nodes", [])}
+    oms_links = bundle.get("oms_links", [])
+    wavelengths = {r["id"]: r for r in bundle.get("wavelengths", [])}
+    ip_links = bundle.get("ip_links", [])
+    ran_sites = {r["id"]: r for r in bundle.get("ran_sites", [])}
+    gpon_clusters = {r["id"]: r for r in bundle.get("gpon_clusters", [])}
+    subsea_cables = {r["id"]: r for r in bundle.get("subsea_cables", [])}
+    sla_tiers = {r["tier_name"]: r for r in bundle.get("sla_tiers", [])}
+    customers = {r["id"]: r for r in bundle.get("customers", [])}
+    rfts_rows = bundle.get("rfts_rows", [])
+    services = bundle.get("services", [])
 
     monitored_cables_set: set[str] = set()
     for rtu in rfts_rows:
@@ -327,8 +328,8 @@ async def get_overview() -> dict[str, Any]:
             "proposed_actions": inc["proposed_actions_json"],
             "executed_actions": inc["executed_actions_json"],
             "alarms": alarms_by_inc.get(inc["incident_id"], []),
-            "created_at": inc["created_at"].isoformat() if inc.get("created_at") else None,
-            "updated_at": inc["updated_at"].isoformat() if inc.get("updated_at") else None,
+            "created_at": inc["created_at"].isoformat() if hasattr(inc.get("created_at"), "isoformat") else inc.get("created_at"),
+            "updated_at": inc["updated_at"].isoformat() if hasattr(inc.get("updated_at"), "isoformat") else inc.get("updated_at"),
         }
         for inc in inc_rows
     ]
@@ -537,6 +538,7 @@ class RegionSwitchPayload(BaseModel):
 @app.post("/api/v1/region/switch")
 async def switch_region(req: RegionSwitchPayload) -> dict[str, Any]:
     global LAST_BENCHMARK_RESULT
+    invalidate_overview_cache()
     emu_base = get_emulator_control_base_url()
     async with httpx.AsyncClient(timeout=12.0) as client:
         r = await client.post(
@@ -547,36 +549,12 @@ async def switch_region(req: RegionSwitchPayload) -> dict[str, Any]:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         sw_data = r.json()
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                TRUNCATE TABLE
-                    osp_ducts,
-                    osp_manholes,
-                    osp_cables,
-                    subsea_cables,
-                    rfts_units,
-                    oms_links,
-                    optical_channels,
-                    network_nodes,
-                    ip_links,
-                    ran_sites,
-                    gpon_clusters,
-                    sla_tiers,
-                    customers,
-                    customer_services,
-                    topology_state,
-                    alarms,
-                    incidents
-                RESTART IDENTITY CASCADE
-                """
-            )
     RECENT_WIRE_PACKETS.clear()
     LAST_BENCHMARK_RESULT = None
-    await sync_all_connectors()
+    await sync_all_connectors(clear_existing=True)
     log_audit("noc_operator", "REGION_SWITCHED", req.region_id, sw_data)
     invalidate_overview_cache()
+    await get_overview()
     return sw_data
 
 
@@ -587,8 +565,7 @@ async def reset_faults() -> dict[str, Any]:
         await client.post(f"{emu_base}/emulator/faults/clear")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM alarms")
-            cur.execute("DELETE FROM incidents")
+            cur.execute("DELETE FROM alarms; DELETE FROM incidents")
     RECENT_WIRE_PACKETS.clear()
     await sync_all_connectors(include_static_topology=False)
     log_audit("noc_operator", "NETWORK_RESET", "ALL", {"status": "cleared"})
@@ -657,6 +634,7 @@ async def update_connector(connector_id: str, req: ConnectorUpdatePayload) -> di
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Connector not found")
+    invalidate_connectors_cache()
     log_audit("noc_admin", "UPDATE_CONNECTOR", connector_id, req.model_dump())
     await sync_all_connectors()
     invalidate_overview_cache()
